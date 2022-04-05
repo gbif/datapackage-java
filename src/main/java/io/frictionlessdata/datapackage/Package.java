@@ -808,6 +808,9 @@ public class Package extends JSONBase{
 
     // https://stackoverflow.com/a/47595502/2535335
     private static boolean isArchive(File f) throws IOException {
+        if (!f.exists()) {
+            return false;
+        }
         int fileSignature = 0;
         RandomAccessFile raf = new RandomAccessFile(f, "r");
         fileSignature = raf.readInt();
