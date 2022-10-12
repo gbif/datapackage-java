@@ -56,7 +56,7 @@ public class Contributor {
             return null;
         try {
         	Contributor c = JsonUtil.getInstance().convertValue(jsonObj, Contributor.class);
-	        if (!isValidUrl(c.path)) {
+	        if (c.path != null && !isValidUrl(c.path)) {
 	        	throw new DataPackageException(invalidUrlMsg);
 	        }
 	        return c;

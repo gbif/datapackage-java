@@ -629,12 +629,13 @@ public class Package extends JSONBase{
         this.setName(textValueOrNull(jsonNodeSource, Package.JSON_KEY_ID));
         this.setVersion(textValueOrNull(jsonNodeSource, Package.JSON_KEY_VERSION));
         this.setHomepage(jsonNodeSource.has(Package.JSON_KEY_HOMEPAGE)
+            && StringUtils.isNotEmpty(jsonNodeSource.get(Package.JSON_KEY_HOMEPAGE).asText())
                 ? new URL(jsonNodeSource.get(Package.JSON_KEY_HOMEPAGE).asText())
                 : null);
         this.setImage(textValueOrNull(jsonNodeSource, Package.JSON_KEY_IMAGE));
         this.setCreated(textValueOrNull(jsonNodeSource, Package.JSON_KEY_CREATED));
         this.setContributors(jsonNodeSource.has(Package.JSON_KEY_CONTRIBUTORS)
-                ? Contributor.fromJson(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).asText())
+                ? Contributor.fromJson(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).toString())
                 : null);
         if (jsonNodeSource.has(Package.JSON_KEY_KEYWORDS)) {
             ArrayNode arr = (ArrayNode) jsonObject.get(Package.JSON_KEY_KEYWORDS);
