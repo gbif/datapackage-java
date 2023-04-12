@@ -237,7 +237,7 @@
 
         <!-- tableschema-java -->
         <dependency>
-            <groupId>com.github.frictionlessdata</groupId>
+            <groupId>io.frictionlessdata</groupId>
             <artifactId>tableschema-java</artifactId>
             <version>${tableschema-java-version}</version>
         </dependency>
