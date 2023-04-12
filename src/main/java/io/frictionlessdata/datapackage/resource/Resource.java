@@ -1,5 +1,6 @@
 package io.frictionlessdata.datapackage.resource;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -7,25 +8,32 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import io.frictionlessdata.datapackage.Dialect;
 import io.frictionlessdata.datapackage.JSONBase;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
+import io.frictionlessdata.datapackage.exceptions.DataPackageValidationException;
 import io.frictionlessdata.tableschema.Table;
 import io.frictionlessdata.tableschema.iterator.TableIterator;
 import io.frictionlessdata.tableschema.schema.Schema;
+import io.frictionlessdata.tableschema.tabledatasource.TableDataSource;
 import io.frictionlessdata.tableschema.util.JsonUtil;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.Writer;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-import static io.frictionlessdata.datapackage.Package.isValidUrl;
+import static io.frictionlessdata.datapackage.Validator.isValidUrl;
 
 
 /**
- * Interface for a Resource.
+ * Interface for a Resource. The essence of a Data Resource is a locator for the data it describes.
+ * A range of other properties can be declared to provide a richer set of metadata.
+ *
  * Based on specs: http://frictionlessdata.io/specs/data-resource/
  */
 public interface Resource<T,C> {
@@ -33,12 +41,102 @@ public interface Resource<T,C> {
     String FORMAT_CSV = "csv";
     String FORMAT_JSON = "json";
 
+    /**
+     * Return the {@link Table} objects underlying the Resource.
+     * @return Table(s)
+     * @throws Exception if reading the tables fails.
+     */
     List<Table> getTables() throws Exception ;
 
     String getJson();
 
-    List<Object[]> getData(boolean cast, boolean keyed, boolean extended, boolean relations) throws Exception;
+    /**
+     * Read all data from a Resource, unmapped and not transformed. This is useful for non-tabular resources
+     *
+     * @return Contents of the resource file or URL.
+     * @throws IOException if reading the data fails
+     *
+     */
+    public Object getRawData() throws IOException;
 
+    /**
+     * Read all data from a Resource, each row as String arrays. This can be used for smaller datapackages,
+     * but for huge or unknown sizes, reading via iterator  is preferred, as this method loads all data into RAM.
+     *
+     * It can be configured to return table rows with relations to other data sources resolved
+     *
+     * The method uses Iterators provided by {@link Table} class, and is roughly implemented after
+     * https://github.com/frictionlessdata/tableschema-py/blob/master/tableschema/table.py
+     *
+     * @param relations true: follow relations
+     * @return A list of table rows.
+     * @throws Exception if parsing the data fails
+     *
+     */
+    @JsonIgnore
+    public List<String[]> getData(boolean relations) throws Exception;
+
+    /**
+     * Read all data from a Resource, each row as Map objects. This can be used for smaller datapackages,
+     * but for huge or unknown sizes, reading via iterator  is preferred, as this method loads all data into RAM.
+     *
+     * The method returns Map&lt;String,Object&gt; where key is the header name, and val is the data.
+     * It can be configured to return table rows with relations to other data sources resolved
+     *
+     * The method uses Iterators provided by {@link Table} class, and is roughly implemented after
+     * https://github.com/frictionlessdata/tableschema-py/blob/master/tableschema/table.py
+     *
+     * @param relations true: follow relations
+     * @return A list of table rows.
+     * @throws Exception if parsing the data fails
+     *
+     */
+    List<Map<String, Object>> getMappedData(boolean relations) throws Exception;
+
+    /**
+     * Most customizable method to retrieve all data in a Resource. Parameters match those in
+     * {@link io.frictionlessdata.tableschema.Table#iterator(boolean, boolean, boolean, boolean)}.
+     * This can be used for smaller datapackages, but for huge or unknown
+     * sizes, reading via iterator  is preferred, as this method loads all data into RAM.
+     *
+     * The method can be configured to return table rows as:
+     * <ul>
+     *     <li>String arrays  (parameter `cast` = false)</li>
+     *     <li>as Object arrays (parameter `cast` = true)</li>
+     *     <li>as a Map&lt;String,Object&gt; where key is the header name, and val is
+     *          the data (parameter `keyed` = true)</li>
+     *     <li>in an "extended" form (parameter `extended` = true) that returns an Object array where the first entry
+     *      is the row number, the second is a String array holding the headers,
+     *      and the third is an Object array holding the row data.</li>
+     *      <li>with relations to other data sources resolved</li>
+     * </ul>
+     *
+     * The method uses Iterators provided by {@link Table} class, and is roughly implemented after
+     * https://github.com/frictionlessdata/tableschema-py/blob/master/tableschema/table.py
+     *
+     * @param keyed true: return table rows as key/value maps
+     * @param extended true: return table rows in an extended form
+     * @param cast true: convert CSV cells to Java objects other than String
+     * @param relations true: follow relations
+     * @return A list of table rows.
+     * @throws Exception if parsing the data fails
+     *
+     */
+    List<Object> getData(boolean keyed, boolean extended, boolean cast, boolean relations) throws Exception;
+
+    /**
+     * Read all data from a Resource. This can be used for smaller datapackages, but for huge or unknown
+     * sizes, reading via iterator  is preferred, as this method loads all data into RAM.
+     * The method ignores relations.
+     *
+     * Returns as a List of Java objects of the type `beanClass`. Under the hood, it uses a  {@link TableIterator}
+     * for reading based on a Java Bean class instead of a {@link io.frictionlessdata.tableschema.schema.Schema}.
+     * It therefore disregards the Schema set on the {@link io.frictionlessdata.tableschema.Table} the iterator works
+     * on but creates its own Schema from the supplied `beanType`.
+     *
+     * @return List of rows as bean instances.
+     * @param beanClass the Bean class this BeanIterator expects
+     */
     List<C> getData(Class<C> beanClass) throws Exception;
 
     /**
@@ -52,24 +150,48 @@ public interface Resource<T,C> {
      */
     void writeData(Path outputDir) throws Exception;
 
+    /**
+     * Write all the data in this resource into the provided {@link Writer}.
+     *
+     * @param out the writer to write to.
+     * @throws Exception if something fails while writing
+     */
+    void writeData(Writer out) throws Exception;
 
+    /**
+     * Write the Resource {@link Schema} to `outputDir`.
+     *
+     * @param parentFilePath the directory to write to. Code must create
+     *                  files as needed.
+     * @throws IOException if something fails while writing
+     */
     void writeSchema(Path parentFilePath) throws IOException;
 
     /**
-     * Returns an Iterator that returns rows as object-arrays
-     * @return Row iterator
-     * @throws Exception
+     * Returns an Iterator that returns rows as object-arrays. Values in each column
+     * are parsed and converted ("cast") to Java objects based on the Field definitions of the Schema.
+     * @return Iterator returning table rows as Object Arrays
+     * @throws Exception  if parsing the data fails
      */
     Iterator<Object[]> objectArrayIterator() throws Exception;
 
     /**
-     * Returns an Iterator that returns rows as object-arrays
-     * @return Row Iterator
-     * @throws Exception
+     * Returns an Iterator that returns rows as object-arrays. Values in each column
+     *    are parsed and converted ("cast") to Java objects based on the Field definitions of the Schema.
+     * @return Iterator returning table rows as Object Arrays
+     * @throws Exception if parsing the data fails
      */
-    Iterator<Object[]> objectArrayIterator(boolean keyed, boolean extended, boolean relations) throws Exception;
+    Iterator<Object[]> objectArrayIterator(boolean extended, boolean relations) throws Exception;
 
-    Iterator<Map<String, Object>> mappedIterator(boolean relations) throws Exception;
+    /**
+     * Returns an Iterator that returns rows as a Map&lt;key,val&gt; where key is the header name, and val is the data.
+     * It can be configured to follow relations
+     *
+     * @param relations Whether references to other data sources get resolved
+     * @return Iterator that returns rows as Maps.
+     * @throws Exception if parsing the data fails
+     */
+    Iterator<Map<String, Object>> mappingIterator(boolean relations) throws Exception;
 
     /**
      * Returns an Iterator that returns rows as bean-arrays.
@@ -82,12 +204,23 @@ public interface Resource<T,C> {
      * @param relations follow relations to other data source
      */
     Iterator<C> beanIterator(Class<C> beanType, boolean relations)throws Exception;
+
     /**
-     * Returns an Iterator that returns rows as string-arrays
-     * @return Row Iterator
-     * @throws Exception
+     * This method creates an Iterator that will return table rows as String arrays.
+     * It therefore disregards the Schema set on the table. It does not follow relations.
+     *
+     * @return Iterator that returns rows as string arrays.
      */
     public Iterator<String[]> stringArrayIterator() throws Exception;
+
+    /**
+     * This method creates an Iterator that will return table rows as String arrays.
+     * It therefore disregards the Schema set on the table. It can be configured to follow relations.
+     *
+     * @return Iterator that returns rows as string arrays.
+     */
+    public Iterator<String[]> stringArrayIterator(boolean relations) throws Exception;
+
 
     String[] getHeaders() throws Exception;
 
@@ -253,6 +386,8 @@ public interface Resource<T,C> {
 
     String getSerializationFormat();
 
+    void checkRelations() throws Exception;
+
     /**
      * Recreate a Resource object from a JSON descriptor, a base path to resolve relative file paths against
      * and a flag that tells us whether we are reading from inside a ZIP archive.
@@ -272,33 +407,47 @@ public interface Resource<T,C> {
         String format = textValueOrNull(resourceJson, JSONBase.JSON_KEY_FORMAT);
         Dialect dialect = JSONBase.buildDialect (resourceJson, basePath, isArchivePackage);
         Schema schema = JSONBase.buildSchema(resourceJson, basePath, isArchivePackage);
+        String encoding = textValueOrNull(resourceJson, JSONBase.JSON_KEY_ENCODING);
+        Charset charset = TableDataSource.getDefaultEncoding();
+        if (StringUtils.isNotEmpty(encoding)) {
+            charset = Charset.forName(encoding);
+        }
 
         // Now we can build the resource objects
         AbstractResource resource = null;
 
         if (path != null){
             Collection paths = fromJSON(path, basePath);
-            resource = build(name, paths, basePath);
+            resource = build(name, paths, basePath, charset);
             if (resource instanceof FilebasedResource) {
                 ((FilebasedResource)resource).setIsInArchive(isArchivePackage);
             }
-        } else if (data != null && format != null){
-            if (format.equals(Resource.FORMAT_JSON))
-                resource = new JSONDataResource(name, ((ArrayNode) data).toString());
+            // inlined data
+        } else if (data != null){
+            if (null == format) {
+                if (!(data instanceof ArrayNode)) {
+                    // from the spec: " a JSON string - in this case the format or
+                    // mediatype properties MUST be provided
+                    // https://specs.frictionlessdata.io/data-resource/#data-inline-data
+                    throw new DataPackageValidationException(
+                            "Invalid Resource. The format property cannot be null for inlined CSV data.");
+                }
+                resource = new JSONDataResource(name, data.toString());
+            } else if (format.equals(Resource.FORMAT_JSON))
+                resource = new JSONDataResource(name, data.toString());
             else if (format.equals(Resource.FORMAT_CSV))
                 resource = new CSVDataResource(name, data.toString());
         } else {
-            DataPackageException dpe = new DataPackageException(
+            throw new DataPackageValidationException(
                     "Invalid Resource. The path property or the data and format properties cannot be null.");
-            throw dpe;
         }
         resource.setDialect(dialect);
         JSONBase.setFromJson(resourceJson, resource, schema);
         return resource;
     }
 
-
-    static AbstractResource build(String name, Collection pathOrUrl, Object basePath) throws MalformedURLException {
+    static AbstractResource build(String name, Collection<?> pathOrUrl, Object basePath, Charset encoding)
+            throws MalformedURLException {
         if (pathOrUrl != null) {
             List<File> files = new ArrayList<>();
             List<URL> urls = new ArrayList<>();
@@ -322,7 +471,7 @@ public interface Resource<T,C> {
             for (String s : strings) {
                 if (basePath instanceof URL) {
                     /*
-                     * We have a URL fragment, that is not valid on its own.
+                     * We have a URL fragment that is not valid on its own.
                      * According to https://github.com/frictionlessdata/specs/issues/652 ,
                      * URL fragments should be resolved relative to the base URL
                      */
@@ -346,7 +495,7 @@ public interface Resource<T,C> {
             if (!files.isEmpty() && !urls.isEmpty()) {
                 throw new DataPackageException("Resources with mixed URL/File paths are not allowed");
             } else if (!files.isEmpty()) {
-                return new FilebasedResource(name, files, normalizePath(basePath));
+                return new FilebasedResource(name, files, normalizePath(basePath), encoding);
             } else if (!urls.isEmpty()) {
                 return new URLbasedResource(name, urls);
             }
@@ -447,4 +596,6 @@ public interface Resource<T,C> {
     static String textValueOrNull(JsonNode source, String fieldName) {
     	return source.has(fieldName) ? source.get(fieldName).asText() : null;
     }
+
+    void validate();
 }

@@ -1,10 +1,18 @@
 package io.frictionlessdata.datapackage.resource;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.google.common.io.ByteStreams;
 import io.frictionlessdata.tableschema.Table;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 
 public class URLbasedResource<C> extends AbstractReferencebasedResource<URL, C> {
@@ -17,6 +25,13 @@ public class URLbasedResource<C> extends AbstractReferencebasedResource<URL, C> 
     @Override
     Table createTable(URL reference) throws Exception {
         return Table.fromSource(reference, schema, getCsvFormat());
+    }
+
+    @Override
+    byte[] getRawData(URL input)  throws IOException {
+        try (InputStream inputStream = input.openStream()) {
+            return getRawData(inputStream);
+        }
     }
 
     @Override
@@ -36,27 +51,4 @@ public class URLbasedResource<C> extends AbstractReferencebasedResource<URL, C> 
         }
         return tables;
     }
-
-/*
-    @Override
-    public void writeDataAsCsv(Path outputDir, Dialect dialect) throws Exception {
-        Dialect lDialect = (null != dialect) ? dialect : Dialect.DEFAULT;
-        List<String> paths = new ArrayList<>(getReferencesAsStrings());
-        List<Table> tables = getTables();
-        int cnt = 0;
-        for (String path : paths) {
-            String fileName;
-            if (isValidUrl(path)) {
-                URL url = new URL (path);
-                String[] pathParts = url.getFile().split("/");
-                fileName = pathParts[pathParts.length-1];
-            } else {
-                throw new DataPackageException("Cannot writeDataAsCsv for "+path);
-            }
-            Table t  = tables.get(cnt++);
-            Path p = outputDir.resolve(fileName);
-            writeTableAsCsv(t, lDialect, p);
-        }
-    }
-    */
 }

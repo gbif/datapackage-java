@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
 import io.frictionlessdata.datapackage.exceptions.DataPackageFileOrUrlNotFoundException;
+import io.frictionlessdata.datapackage.exceptions.DataPackageValidationException;
 import io.frictionlessdata.datapackage.resource.Resource;
 import io.frictionlessdata.tableschema.exception.JsonParsingException;
 import io.frictionlessdata.tableschema.io.FileReference;
@@ -30,12 +31,11 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import static io.frictionlessdata.datapackage.Package.isValidUrl;
+import static io.frictionlessdata.datapackage.Validator.isValidUrl;
 
 @JsonInclude(value = Include.NON_EMPTY, content = Include.NON_EMPTY )
 public abstract class JSONBase {
     static final int JSON_INDENT_FACTOR = 4;// JSON keys.
-    // TODO: Use somethign like GSON instead so this explicit mapping is not necessary?
     public static final String JSON_KEY_NAME = "name";
     public static final String JSON_KEY_PROFILE = "profile";
     public static final String JSON_KEY_PATH = "path";
@@ -99,7 +99,16 @@ public abstract class JSONBase {
     /**
      * @param profile the profile to set
      */
-    public void setProfile(String profile){this.profile = profile;}
+    public void setProfile(String profile){
+        if (profile.equals(Profile.PROFILE_TABULAR_DATA_PACKAGE)) {
+            if (this instanceof Package) {
+
+            } else if (this instanceof Resource) {
+                throw new DataPackageValidationException("Cannot set "+Profile.PROFILE_TABULAR_DATA_PACKAGE+" on a resource");
+            }
+        }
+        this.profile = profile;
+    }
 
     /**
      * @return the title
@@ -234,7 +243,6 @@ public abstract class JSONBase {
     }
 
     public static void setFromJson(JsonNode resourceJson, JSONBase retVal, Schema schema) {
-
         if (resourceJson.has(JSONBase.JSON_KEY_SCHEMA) && resourceJson.get(JSONBase.JSON_KEY_SCHEMA).isTextual())
             retVal.originalReferences.put(JSONBase.JSON_KEY_SCHEMA, resourceJson.get(JSONBase.JSON_KEY_SCHEMA).asText());
         if (resourceJson.has(JSONBase.JSON_KEY_DIALECT) && resourceJson.get(JSONBase.JSON_KEY_DIALECT).isTextual())
@@ -293,6 +301,8 @@ public abstract class JSONBase {
         try {
             return getFileContentAsString(url.openStream());
         } catch (Exception ex) {
+            if (ex instanceof FileNotFoundException)
+                throw new DataPackageValidationException(ex.getMessage(), ex);
             throw new DataPackageException(ex);
         }
     }
@@ -405,7 +415,7 @@ public abstract class JSONBase {
      */
 
     private static ObjectNode dereference(String url, URL basePath) throws IOException {
-        JsonNode dereferencedObj = null;
+        JsonNode dereferencedObj;
 
         if (isValidUrl(url)) {
             // Create the dereferenced object from the remote file.
