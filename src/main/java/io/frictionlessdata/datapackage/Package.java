@@ -670,10 +670,7 @@ public class Package extends JSONBase{
     	ObjectNode objectNode = (ObjectNode) JsonUtil.getInstance().createNode(this);
     	// update any manually set properties
     	this.jsonObject.fields().forEachRemaining(f->{
-            // but do not overwrite properties set via the API
-            if (!wellKnownKeys.contains(f.getKey())) {
-                objectNode.set(f.getKey(), f.getValue());
-            }
+            objectNode.set(f.getKey(), f.getValue());
     	});
 
     	Iterator<Resource> resourceIter = resources.iterator();
@@ -772,8 +769,8 @@ public class Package extends JSONBase{
         this.setImagePath(textValueOrNull(jsonNodeSource, Package.JSON_KEY_IMAGE));
         this.setCreated(textValueOrNull(jsonNodeSource, Package.JSON_KEY_CREATED));
         if (jsonNodeSource.has(Package.JSON_KEY_CONTRIBUTORS) &&
-                StringUtils.isNotEmpty(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).asText())) {
-            setContributors(Contributor.fromJson(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).asText()));
+                !jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).isEmpty()) {
+            setContributors(Contributor.fromJson(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).toString()));
         }
         if (jsonNodeSource.has(Package.JSON_KEY_KEYWORDS)) {
             ArrayNode arr = (ArrayNode) jsonObject.get(Package.JSON_KEY_KEYWORDS);

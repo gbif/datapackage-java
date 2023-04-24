@@ -23,7 +23,7 @@ public class Contributor {
     private String title;
     private String email;
     private URL path;
-    private Role role;
+    private String role;
     private String organization;
 
     public String getTitle() {
@@ -38,7 +38,7 @@ public class Contributor {
 		return path;
 	}
 
-	public Role getRole() {
+	public String getRole() {
 		return role;
 	}
 
@@ -93,13 +93,5 @@ public class Contributor {
     		objArray.add(JsonUtil.getInstance().convertValue(o, Map.class));
     	});
         return fromJson(objArray);
-    }
-
-    public static enum Role {
-        AUTHOR,
-        PUBLISHER,
-        MAINTAINER,
-        WRANGLER,
-        CONTRIBUTOR
     }
 }
