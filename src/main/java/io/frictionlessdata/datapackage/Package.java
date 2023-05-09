@@ -53,7 +53,9 @@ public class Package extends JSONBase{
     private static final String JSON_KEY_HOMEPAGE = "homepage";
     private static final String JSON_KEY_KEYWORDS = "keywords";
     private static final String JSON_KEY_IMAGE = "image";
+    private static final String JSON_KEY_IMAGE_PATH = "imagePath";
     private static final String JSON_KEY_CREATED = "created";
+    private static final String JSON_KEY_VALID = "valid";
     private static final String JSON_KEY_CONTRIBUTORS = "contributors";
 
     private static final List<String> wellKnownKeys = Arrays.asList(
@@ -959,7 +961,8 @@ public class Package extends JSONBase{
         Path nf = outFs.getPath(parentDirName+File.separator+DATAPACKAGE_FILENAME);
         try (Writer writer = Files.newBufferedWriter(nf, StandardCharsets.UTF_8, StandardOpenOption.CREATE)) {
             ObjectNode jsonNode = this.getJsonNode();
-            jsonNode.remove(JSON_KEY_IMAGE);
+            jsonNode.remove(JSON_KEY_IMAGE_PATH);
+            jsonNode.remove(JSON_KEY_VALID);
             writer.write(jsonNode.toPrettyString());
         }
     }
