@@ -110,7 +110,7 @@ public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C>
 
     @Override
     Table createTable(File reference) {
-        return Table.fromSource(reference, basePath, schema, getCsvFormat());
+        return Table.fromSource(reference, basePath, schema, getCsvFormat(), true);
     }
 
     @Override
