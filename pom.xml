@@ -6,15 +6,28 @@
     <artifactId>datapackage-java</artifactId>
     <version>0.6.14-gbif-SNAPSHOT</version>
     <packaging>jar</packaging>
+
     <issueManagement>
         <url>https://github.com/frictionlessdata/datapackage-java/issues</url>
         <system>GitHub Issues</system>
     </issueManagement>
+
     <scm>
         <url>https://github.com/gbif/github-maven-example</url>
         <connection>scm:git:git://github.com/gbif/datapackage-java.git</connection>
         <developerConnection>scm:git:git@github.com:gbif/datapackage-java.git</developerConnection>
     </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>gbif-release</id>
+            <url>https://repository.gbif.org/content/repositories/releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>gbif-snapshot</id>
+            <url>https://repository.gbif.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -32,10 +45,7 @@
         <maven-javadoc-plugin.version>3.4.1</maven-javadoc-plugin.version>
         <maven-resources-plugin.version>3.3.0</maven-resources-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M7</maven-surefire-plugin.version>
-        <maven-deploy-plugin.version>3.0.0</maven-deploy-plugin.version>
-        <maven-gpg-plugin.version>3.0.1</maven-gpg-plugin.version>
         <maven-release-plugin.version>3.0.0-M1</maven-release-plugin.version>
-        <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
         <coveralls-maven-plugin.version>4.3.0</coveralls-maven-plugin.version>
         <dependency-check-maven.version>7.4.4</dependency-check-maven.version>
         <jacoco-maven-plugin.version>0.8.8</jacoco-maven-plugin.version>
@@ -51,6 +61,7 @@
             <url>https://jitpack.io</url>
         </repository>
     </repositories>
+
     <build>
         <plugins>
             <plugin>
@@ -115,48 +126,6 @@
             </plugin>
 
             <plugin>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>${maven-deploy-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <id>default-deploy</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>deploy</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- Comment temporarily -->
-<!--            <plugin>-->
-<!--                <groupId>org.apache.maven.plugins</groupId>-->
-<!--                <artifactId>maven-gpg-plugin</artifactId>-->
-<!--                <version>${maven-gpg-plugin.version}</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>sign-artifacts</id>-->
-<!--                        <phase>verify</phase>-->
-<!--                        <goals>-->
-<!--                            <goal>sign</goal>-->
-<!--                        </goals>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
-
-            <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>${nexus-staging-maven-plugin.version}</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <serverId>ossrh</serverId>
-                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                </configuration>
-            </plugin>
-
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
                 <version>${maven-release-plugin.version}</version>
@@ -182,21 +151,8 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <!-- Comment temporarily -->
-<!--            <plugin>-->
-<!--                <groupId>org.owasp</groupId>-->
-<!--                <artifactId>dependency-check-maven</artifactId>-->
-<!--                <version>6.0.1</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <goals>-->
-<!--                            <goal>check</goal>-->
-<!--                        </goals>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
         </plugins>
+
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
@@ -206,8 +162,8 @@
             </resource>
         </resources>
     </build>
-    <dependencies>
 
+    <dependencies>
         <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-simple -->
 		<dependency>
 		    <groupId>org.slf4j</groupId>
