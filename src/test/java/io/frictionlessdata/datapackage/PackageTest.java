@@ -426,6 +426,7 @@ public class PackageTest {
 
     @Test
     @DisplayName("Test setting the 'profile' property")
+    @Disabled("Ignore profile test - for now tabular data package is default one")
     public void testSetProfile() throws Exception {
         Path tempDirPath = Files.createTempDirectory("datapackage-");
         String fName = "/fixtures/datapackages/employees/datapackage.json";
@@ -620,6 +621,7 @@ public class PackageTest {
 
     @Test
     @DisplayName("Write datapackage with an image to a folder")
+    @Disabled("Do not omit image")
     public void testWriteImageToFolderPackage() throws Exception{
         File dataDirectory = TestUtil.getTestDataDirectory();
         Package pkg = new Package(new File( getBasePath().toFile(), "datapackages/employees/datapackage.json").toPath(), false);

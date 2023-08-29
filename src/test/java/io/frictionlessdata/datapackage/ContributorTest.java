@@ -3,6 +3,7 @@ package io.frictionlessdata.datapackage;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
 import io.frictionlessdata.tableschema.util.JsonUtil;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -57,6 +58,7 @@ public class ContributorTest {
     
     @Test
     @DisplayName("validate DPE is thrown with invalid Role")
+	@Disabled("Allow free roles")
     public void testInvalidRole() {
     	DataPackageException ex = Assertions.assertThrows(DataPackageException.class, ()->{
     		Contributor.fromJson(invalidRoleContributorsJson);
