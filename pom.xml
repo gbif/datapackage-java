@@ -11,9 +11,9 @@
         <system>GitHub Issues</system>
     </issueManagement>
     <scm>
-        <url>https://github.com/frictionlessdata/github-maven-example</url>
-        <connection>scm:git:git://github.com/frictionlessdata/datapackage-java.git</connection>
-        <developerConnection>scm:git:git@github.com:frictionlessdata/datapackage-java.git</developerConnection>
+        <url>https://github.com/gbif/github-maven-example</url>
+        <connection>scm:git:git://github.com/gbif/datapackage-java.git</connection>
+        <developerConnection>scm:git:git@github.com:gbif/datapackage-java.git</developerConnection>
     </scm>
 
     <properties>
