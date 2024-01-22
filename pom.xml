@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.frictionlessdata</groupId>
     <artifactId>datapackage-java</artifactId>
-    <version>0.6.16-gbif-SNAPSHOT</version>
+    <version>0.6.16-gbif</version>
     <packaging>jar</packaging>
 
     <issueManagement>
@@ -15,7 +15,7 @@
         <url>https://github.com/gbif/github-maven-example</url>
         <connection>scm:git:git://github.com/gbif/datapackage-java.git</connection>
         <developerConnection>scm:git:git@github.com:gbif/datapackage-java.git</developerConnection>
-      <tag>HEAD</tag>
+      <tag>datapackage-java-0.6.16-gbif</tag>
   </scm>
 
     <distributionManagement>
