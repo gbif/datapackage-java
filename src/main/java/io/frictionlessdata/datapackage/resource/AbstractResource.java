@@ -3,14 +3,24 @@ package io.frictionlessdata.datapackage.resource;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.frictionlessdata.datapackage.Dialect;
 import io.frictionlessdata.datapackage.JSONBase;
+import io.frictionlessdata.datapackage.Package;
 import io.frictionlessdata.datapackage.Profile;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
 import io.frictionlessdata.datapackage.exceptions.DataPackageValidationException;
+import io.frictionlessdata.datapackage.fk.PackageForeignKey;
 import io.frictionlessdata.tableschema.Table;
+import io.frictionlessdata.tableschema.exception.ForeignKeyException;
+import io.frictionlessdata.tableschema.exception.JsonSerializingException;
+import io.frictionlessdata.tableschema.exception.TableIOException;
+import io.frictionlessdata.tableschema.exception.TypeInferringException;
+import io.frictionlessdata.tableschema.field.Field;
 import io.frictionlessdata.tableschema.fk.ForeignKey;
 import io.frictionlessdata.tableschema.io.FileReference;
 import io.frictionlessdata.tableschema.io.URLFileReference;
@@ -19,9 +29,12 @@ import io.frictionlessdata.tableschema.iterator.TableIterator;
 import io.frictionlessdata.tableschema.schema.Schema;
 import io.frictionlessdata.tableschema.tabledatasource.TableDataSource;
 import io.frictionlessdata.tableschema.util.JsonUtil;
+import io.frictionlessdata.tableschema.util.TableSchemaUtil;
 import org.apache.commons.collections4.iterators.IteratorChain;
 import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -36,28 +49,57 @@ import java.util.*;
  * Based on specs: http://frictionlessdata.io/specs/data-resource/
  */
 @JsonInclude(value = Include.NON_EMPTY, content = Include.NON_EMPTY )
-public abstract class AbstractResource<T,C> extends JSONBase implements Resource<T,C> {
+public abstract class AbstractResource<T> extends JSONBase implements Resource<T> {
 
     // Data properties.
+    @JsonIgnore
     protected List<Table> tables;
 
+    @JsonProperty("format")
     String format = null;
 
+    @JsonProperty("dialect")
     Dialect dialect;
-    ArrayNode sources = null;
-    ArrayNode licenses = null;
 
-    // Schema
+    @JsonProperty("schema")
     Schema schema = null;
 
+    @JsonIgnore
     boolean serializeToFile = true;
-    private String serializationFormat;
+
+    @JsonIgnore
+    String serializationFormat;
+
+    @JsonIgnore
     final List<DataPackageValidationException> errors = new ArrayList<>();
 
     AbstractResource(String name){
         this.name = name;
         if (null == name)
             throw new DataPackageException("Invalid Resource, it does not have a name property.");
+    }
+
+
+    @JsonProperty(JSON_KEY_SCHEMA)
+    public Object getSchemaForJson() {
+        if (originalReferences.containsKey(JSON_KEY_SCHEMA)) {
+            return originalReferences.get(JSON_KEY_SCHEMA);
+        }
+        if (null != schema) {
+            return schema;
+        }
+        return null;
+    }
+
+    @JsonProperty(JSON_KEY_DIALECT)
+    public Object getDialectForJson() {
+        if (originalReferences.containsKey(JSON_KEY_DIALECT)) {
+            return originalReferences.get(JSON_KEY_DIALECT);
+        }
+        if (null != dialect) {
+            return dialect;
+        }
+        return null;
     }
 
     @Override
@@ -109,7 +151,7 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
     }
 
     @Override
-    public Iterator<C> beanIterator(Class<C> beanType, boolean relations) throws Exception {
+    public <C> Iterator<C> beanIterator(Class<C> beanType, boolean relations) throws Exception {
         ensureDataLoaded();
         IteratorChain<C> ic = new IteratorChain<>();
         for (Table table : tables) {
@@ -216,8 +258,94 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
         return retVal;
     }
 
+
+    @JsonIgnore
+    public String getDataAsJson() {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        Schema schema = (null != this.schema) ? this.schema : this.inferSchema();
+        try {
+            ensureDataLoaded();
+        } catch (Exception e) {
+            throw new DataPackageException(e);
+        }
+
+        for (Table table : tables) {
+            Iterator<Object> iter = table.iterator(false, false, true, false);
+            iter.forEachRemaining((rec) -> {
+                Object[] row = (Object[]) rec;
+                Map<String, Object> obj = new LinkedHashMap<>();
+                int i = 0;
+                for (Field field : schema.getFields()) {
+                    Object s = row[i];
+                    obj.put(field.getName(), field.formatValueForJson(s));
+                    i++;
+                }
+                rows.add(obj);
+            });
+        }
+
+        String retVal;
+        ObjectMapper mapper = JsonUtil.getInstance().getMapper();
+        try {
+            retVal = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(rows);
+        } catch (JsonProcessingException ex) {
+            throw new JsonSerializingException(ex);
+        }
+        return retVal;
+    }
+
+    @JsonIgnore
+    public String getDataAsCsv() {
+        Dialect lDialect = (null != dialect) ? dialect : Dialect.DEFAULT;
+        Schema schema = (null != this.schema) ? this.schema : inferSchema();
+
+        return getDataAsCsv(lDialect, schema);
+    }
+
+    public String getDataAsCsv(Dialect dialect, Schema schema) {
+        StringBuilder out = new StringBuilder();
+        try {
+            ensureDataLoaded();
+            if (null == schema) {
+                return getDataAsCsv(dialect, inferSchema());
+            }
+            CSVFormat locFormat = dialect.toCsvFormat();
+            locFormat = locFormat.builder().setHeader(schema.getHeaders()).get();
+            CSVPrinter csvPrinter = new CSVPrinter(out, locFormat);
+            String[] headerNames = schema.getHeaders();
+
+            for (Table table : tables) {
+                String[] headers = table.getHeaders();
+                if (null == headerNames) {
+                    headerNames = headers;
+                }
+                Map<Integer, Integer> mapping = TableSchemaUtil.createSchemaHeaderMapping(
+                        headers,
+                        headerNames,
+                        table.getTableDataSource().hasReliableHeaders());
+
+                appendCSVDataToPrinter(table, mapping, schema, csvPrinter);
+            }
+
+            csvPrinter.close();
+        } catch (IOException ex) {
+            throw new TableIOException(ex);
+        } catch (Exception e) {
+            throw new DataPackageException(e);
+        }
+        String result = out.toString();
+        if (result.endsWith("\n")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        if (result.endsWith("\r")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
+    }
+
+
     @Override
-    public List<C> getData(Class<C> beanClass)  throws Exception {
+    public <C> List<C> getData(Class<C> beanClass)  throws Exception {
         List<C> retVal = new ArrayList<C>();
         ensureDataLoaded();
         for (Table t : tables) {
@@ -243,28 +371,84 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
         return tables;
     }
 
-    public void checkRelations() {
+    public void checkRelations(Package pkg) {
         if (null != schema) {
+            List<PackageForeignKey> fks = new ArrayList<>();
             for (ForeignKey fk : schema.getForeignKeys()) {
-                fk.validate();
-                fk.getReference().validate();
-            }
-            for (ForeignKey fk : schema.getForeignKeys()) {
-                if (null != fk.getReference().getResource()) {
-                    //Package pkg = new Package(fk.getReference().getDatapackage(), true);
-                    // TODO fix this
+                String resourceName = fk.getReference().getResource();
+                Resource referencedResource;
+                if (null != resourceName) {
+                    if (resourceName.isEmpty()) {
+                        referencedResource = this;
+                    } else {
+                        referencedResource = pkg.getResource(resourceName);
+                    }
+                    if (null == referencedResource) {
+                        throw new DataPackageValidationException("Foreign key references non-existent referencedResource: " + resourceName);
+                    }
+                    try {
+                        PackageForeignKey pFK = new PackageForeignKey(fk, this, pkg);
+                        fks.add(pFK);
+                        pFK.validate();
+                    } catch (Exception e) {
+                        throw new DataPackageValidationException("Foreign key validation failed: " + resourceName, e);
+                    }
                 }
+            }
+
+            try {
+                Map<PackageForeignKey, List<Object>> map = new HashMap<>();
+                for (PackageForeignKey fk : fks) {
+                    String refResourceName = fk.getForeignKey().getReference().getResource();
+                    Resource refResource = pkg.getResource(refResourceName);
+                    List<Object> data = refResource.getData(true, false, true, false);
+                    map.put(fk, data);
+                }
+                List<Object> data = this.getData(true, false, true, false);
+                for (Object d : data) {
+                    Map<String, Object> row = (Map<String, Object>) d;
+                    for (String key : row.keySet()) {
+                        for (PackageForeignKey fk : map.keySet()) {
+                            if (fk.getForeignKey().getFieldNames().contains(key)) {
+                                List<Object>refData = map.get(fk);
+                                Map<String, String> fieldMapping = fk.getForeignKey().getFieldMapping();
+                                String refFieldName = fieldMapping.get(key);
+                                Object fkVal = row.get(key);
+                                boolean found = false;
+
+                                for (Object refRow : refData) {
+                                    Map<String, Object> refRowMap = (Map<String, Object>) refRow;
+                                    Object refVal = refRowMap.get(refFieldName);
+                                    if (Objects.equals(fkVal, refVal)) {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    throw new ForeignKeyException("Foreign key validation failed: "
+                                            + fk.getForeignKey().getFieldNames() + " -> "
+                                            + fk.getForeignKey().getReference().getFieldNames() + ": '"
+                                            + fkVal + "' not found in resource '"
+                                            + fk.getForeignKey().getReference().getResource()+"'.");
+                                }
+                            }
+                        }
+                    }
+
+                }
+            } catch (Exception e) {
+                throw new DataPackageValidationException("Error reading data with relations: " + e.getMessage(), e);
             }
         }
     }
 
-    public void validate()  {
+    public void validate(Package pkg)  {
         if (null == tables)
             return;
         try {
             // will validate schema against data
             tables.forEach(Table::validate);
-            checkRelations();
+            checkRelations(pkg);
         } catch (Exception ex) {
             if (ex instanceof DataPackageValidationException) {
                 errors.add((DataPackageValidationException) ex);
@@ -274,68 +458,6 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
             }
         }
     }
-
-    /**
-     * Get JSON representation of the object.
-     * @return a JSONObject representing the properties of this object
-     */
-    @JsonIgnore
-    public String getJson(){
-        ObjectNode json = (ObjectNode) JsonUtil.getInstance().createNode(this);
-
-        if (this instanceof URLbasedResource) {
-            json.set(JSON_KEY_PATH, ((URLbasedResource) this).getPathJson());
-        } else if (this instanceof FilebasedResource) {
-            if (this.shouldSerializeToFile()) {
-                json.set(JSON_KEY_PATH, ((FilebasedResource) this).getPathJson());
-            } else {
-                try {
-                    ArrayNode data = JsonUtil.getInstance().createArrayNode();
-                    List<Table> tables = readData();
-                    for (Table t : tables) {
-                        ArrayNode arr = JsonUtil.getInstance().createArrayNode(t.asJson());
-                        arr.elements().forEachRemaining(o->data.add(o));
-                    }
-                    json.set(JSON_KEY_DATA, data);
-                } catch (Exception ex) {
-                    throw new DataPackageException(ex);
-                }
-            }
-        } else if ((this instanceof AbstractDataResource)) {
-            if (this.shouldSerializeToFile()) {
-                //TODO implement storing only the path - and where to get it
-            } else {
-                try {
-                    json.set(JSON_KEY_DATA, JsonUtil.getInstance().createNode(this.getRawData()));
-                } catch (IOException e) {
-                    throw new DataPackageException(e);
-                }
-            }
-        }
-
-        String schemaObj = originalReferences.get(JSONBase.JSON_KEY_SCHEMA);
-        if ((null == schemaObj) && (null != schema)) {
-            if (null != schema.getReference()) {
-                schemaObj = JSON_KEY_SCHEMA + "/" + schema.getReference().getFileName();
-            }
-        }
-        if(Objects.nonNull(schemaObj)) {
-        	json.put(JSON_KEY_SCHEMA, schemaObj);
-        }
-
-        String dialectObj = originalReferences.get(JSONBase.JSON_KEY_DIALECT);
-        if ((null == dialectObj) && (null != dialect)) {
-            if (null != dialect.getReference()) {
-                dialectObj = JSON_KEY_DIALECT + "/" + dialect.getReference().getFileName();
-            }
-        }
-        if(Objects.nonNull(dialectObj)) {
-        	json.put(JSON_KEY_DIALECT, dialectObj);
-        }
-        return json.toString();
-    }
-
-
 
     public void writeSchema(Path parentFilePath) throws IOException {
         String relPath = getPathForWritingSchema();
@@ -369,10 +491,37 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
         }
         Files.deleteIfExists(parentFilePath);
         try (Writer wr = Files.newBufferedWriter(parentFilePath, StandardCharsets.UTF_8)) {
-            wr.write(schema.getJson());
+            wr.write(schema.asJson());
         }
     }
 
+    public void writeDialect(Path parentFilePath) throws IOException {
+        if (null == dialect)
+            return;
+        String relPath = getPathForWritingDialect();
+        if (null == originalReferences.get(JSONBase.JSON_KEY_DIALECT) && Objects.nonNull(relPath)) {
+            originalReferences.put(JSONBase.JSON_KEY_DIALECT, relPath);
+        }
+
+        if (null != relPath) {
+            boolean isRemote;
+            try {
+                // don't try to write schema files that came from remote, let's just add the URL to the descriptor
+                URI uri = new URI(relPath);
+                isRemote = (null != uri.getScheme()) &&
+                        (uri.getScheme().equals("http") || uri.getScheme().equals("https"));
+                if (isRemote)
+                    return;
+            } catch (URISyntaxException ignored) {}
+            Path p;
+            if (parentFilePath.toString().isEmpty()) {
+                p = parentFilePath.getFileSystem().getPath(relPath);
+            } else {
+                p = parentFilePath.resolve(relPath);
+            }
+            writeDialect(p, dialect);
+        }
+    }
 
     private static void writeDialect(Path parentFilePath, Dialect dialect) throws IOException {
         if (!Files.exists(parentFilePath)) {
@@ -380,8 +529,29 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
         }
         Files.deleteIfExists(parentFilePath);
         try (Writer wr = Files.newBufferedWriter(parentFilePath, StandardCharsets.UTF_8)) {
-            wr.write(dialect.getJson());
+            wr.write(dialect.asJson());
         }
+    }
+
+    @Override
+    public Schema inferSchema() throws TypeInferringException {
+        Schema schema;
+        try {
+            List<Table> tables = getTables();
+            String[] headers = getHeaders();
+            schema = tables.get(0).inferSchema(headers, -1);
+            for (int i = 1; i < tables.size(); i++) {
+                Schema schema2 = tables.get(i).inferSchema();
+                for (Field<?> field : schema2.getFields()) {
+                    if (null == schema.getField(field.getName())) {
+                        throw new TypeInferringException("Found field mismatch in Tables of Resource: " + getName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new DataPackageException("Error inferring schema", e);
+        }
+        return schema;
     }
 
     /**
@@ -451,6 +621,7 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
      * @return the dialect
      */
     @Override
+    @JsonIgnore
     public Dialect getDialect() {
         return dialect;
     }
@@ -478,21 +649,25 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
     }
 
     @Override
+    @JsonProperty(JSON_KEY_FORMAT)
     public String getFormat() {
         return format;
     }
 
     @Override
+    @JsonProperty(JSON_KEY_FORMAT)
     public void setFormat(String format) {
         this.format = format;
     }
 
     @Override
+    @JsonIgnore
     public Schema getSchema(){
         return this.schema;
     }
 
     @Override
+    @JsonIgnore
     public void setSchema(Schema schema) {
         this.schema = schema;
     }
@@ -586,11 +761,21 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
                 Files.createDirectories(p);
             }
             Files.deleteIfExists(p);
-            try (Writer wr = Files.newBufferedWriter(p, StandardCharsets.UTF_8)) {
-                if (serializationFormat.equals(TableDataSource.Format.FORMAT_CSV.getLabel())) {
-                    t.writeCsv(wr, lDialect.toCsvFormat());
-                } else if (serializationFormat.equals(TableDataSource.Format.FORMAT_JSON.getLabel())) {
-                    wr.write(t.asJson());
+
+            // if the serializationFormat is set, serialize the data to JSON/CSV file
+            if (null != serializationFormat) {
+                try (Writer wr = Files.newBufferedWriter(p, StandardCharsets.UTF_8)) {
+                    if (serializationFormat.equals(TableDataSource.Format.FORMAT_CSV.getLabel())) {
+                        t.writeCsv(wr, lDialect.toCsvFormat());
+                    } else if (serializationFormat.equals(TableDataSource.Format.FORMAT_JSON.getLabel())) {
+                        wr.write(t.asJson());
+                    }
+                }
+            } else {
+                // if serializationFormat is not set (probably non-tabular data), serialize the data to a binary file
+                byte [] data = (byte[])this.getRawData();
+                try (FileOutputStream fos = new FileOutputStream(p.toFile())){
+                     fos.write(data);
                 }
             }
         }
@@ -611,5 +796,35 @@ public abstract class AbstractResource<T,C> extends JSONBase implements Resource
         try (Writer wr = Files.newBufferedWriter(outputFile, StandardCharsets.UTF_8)) {
             t.writeCsv(wr, dialect.toCsvFormat());
         }
+    }
+
+    /**
+     * Append the data to a {@link org.apache.commons.csv.CSVPrinter}. Column sorting is according to the mapping
+     * @param mapping the mapping of the column numbers in the CSV file to the column numbers in the data source
+     * @param schema the Schema to use for formatting the data
+     * @param csvPrinter the CSVPrinter to write to
+     */
+    private void appendCSVDataToPrinter(Table table, Map<Integer, Integer> mapping, Schema schema, CSVPrinter csvPrinter) {
+        Iterator<Object> iter = table.iterator(false, false, true, false);
+        iter.forEachRemaining((rec) -> {
+            Object[] row = (Object[])rec;
+            Object[] sortedRec = new Object[row.length];
+            for (int i = 0; i < row.length; i++) {
+                sortedRec[mapping.get(i)] = row[i];
+            }
+            List<String> obj = new ArrayList<>();
+            int i = 0;
+            for (Field field : schema.getFields()) {
+                Object s = sortedRec[i];
+                obj.add(field.formatValueAsString(s));
+                i++;
+            }
+
+            try {
+                csvPrinter.printRecord(obj);
+            } catch (Exception ex) {
+                throw new TableIOException(ex);
+            }
+        });
     }
 }

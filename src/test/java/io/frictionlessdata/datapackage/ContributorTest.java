@@ -16,7 +16,7 @@ public class ContributorTest {
 			"\"title\":\"HDIC\"," + 
 			"\"email\":\"me@example.com\"," + 
 			"\"path\":\"https://example.com\"," + 
-			"\"role\":\"AUTHOR\"," + 
+			"\"role\":\"author\"," +
 			"\"organization\":\"space cadets\"" + 
 			"}]";
 	
@@ -25,7 +25,7 @@ public class ContributorTest {
 			"\"title\":\"HDIC\"," + 
 			"\"email\":\"me@example.com\"," + 
 			"\"path\":\"qwerty\"," + 
-			"\"role\":\"AUTHOR\"," + 
+			"\"role\":\"author\"," +
 			"\"organization\":\"space cadets\"" + 
 			"}]";
 	
@@ -57,12 +57,10 @@ public class ContributorTest {
     }
     
     @Test
-    @DisplayName("validate DPE is thrown with invalid Role")
-	@Disabled("Allow free roles")
+    @DisplayName("validate Roles can be any string")
+	// fix for https://github.com/frictionlessdata/datapackage-java/issues/45 after frictionless changed spec
     public void testInvalidRole() {
-    	DataPackageException ex = Assertions.assertThrows(DataPackageException.class, ()->{
-    		Contributor.fromJson(invalidRoleContributorsJson);
-    	});
-    	Assertions.assertTrue(ex.getMessage().contains("\"ERTYUIJHG\": not one of the values accepted"));
+		Collection<Contributor> contributors = Contributor.fromJson(invalidRoleContributorsJson);
+		Assertions.assertEquals(contributors.iterator().next().getRole(), "ERTYUIJHG");
     }
 }

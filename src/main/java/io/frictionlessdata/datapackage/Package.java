@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
@@ -17,7 +18,6 @@ import io.frictionlessdata.datapackage.resource.Resource;
 import io.frictionlessdata.tableschema.exception.JsonParsingException;
 import io.frictionlessdata.tableschema.exception.ValidationException;
 import io.frictionlessdata.tableschema.io.LocalFileReference;
-import io.frictionlessdata.tableschema.schema.Schema;
 import io.frictionlessdata.tableschema.util.JsonUtil;
 import org.apache.commons.collections.list.UnmodifiableList;
 import org.apache.commons.collections.set.UnmodifiableSet;
@@ -30,6 +30,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.*;
@@ -65,14 +66,18 @@ public class Package extends JSONBase{
             JSON_KEY_KEYWORDS, JSONBase.JSON_KEY_SCHEMA, JSONBase.JSON_KEY_NAME, JSONBase.JSON_KEY_DATA,
             JSONBase.JSON_KEY_DIALECT, JSONBase.JSON_KEY_LICENSES, JSONBase.JSON_KEY_SOURCES, JSONBase.JSON_KEY_PROFILE);
 
+    /**
+     * The charset (encoding) for writing
+     */
+    @JsonIgnore
+    private final Charset charset = StandardCharsets.UTF_8;
 
     // Filesystem path pointing to the Package; either ZIP file or directory
     private Object basePath = null;
     private String id;
     private String version;
-    private int[] versionParts;
     private URL homepage;
-    private Set<String> keywords = new TreeSet<>();
+    private Set<String> keywords = new LinkedHashSet<>();
     private String image;
     private byte[] imageData;
     private ZonedDateTime created;
@@ -101,7 +106,8 @@ public class Package extends JSONBase{
     }
     
     /**
-     * Load from String representation of JSON object. To prevent file system traversal attacks
+     * Load from String representation of JSON object. The resources of the package could be either inline JSON
+     * or relative path references to files.To prevent file system traversal attacks
      * while loading Resources, the basePath must be explicitly set here, the `basePath`
      * variable cannot be null.
      *
@@ -266,19 +272,19 @@ public class Package extends JSONBase{
         return id;
     }
 
+    @JsonProperty("keywords")
     public Set<String> getKeywords() {
         if (null == keywords)
             return null;
         return UnmodifiableSet.decorate(keywords);
     }
 
+    @JsonProperty("version")
     public String getVersion() {
-        if (versionParts != null) {
-            return versionParts[0]+"."+versionParts[1]+"."+versionParts[2];
-        } else
-            return version;
+        return version;
     }
 
+    @JsonProperty("homepage")
     public URL getHomepage() {
         return homepage;
     }
@@ -378,6 +384,18 @@ public class Package extends JSONBase{
      * Convert both the descriptor and all linked Resources to JSON and return them.
      * @return JSON-String representation of the Package
      */
+    @JsonIgnore
+    public String asJson(){
+        return getJsonNode().toPrettyString();
+    }
+
+    /**
+     * Convert both the descriptor and all linked Resources to JSON and return them.
+     * @return JSON-String representation of the Package
+     *
+     * Deprecated, use {@link #asJson()} instead.
+     */
+    @Deprecated
     @JsonIgnore
     public String getJson(){
         return getJsonNode().toPrettyString();
@@ -545,6 +563,19 @@ public class Package extends JSONBase{
         write (outputDir, null, zipCompressed);
     }
 
+    private File findOrCreateOutputDir(File outputDir, boolean zipCompressed) {
+        if (!zipCompressed) {
+            String fName = outputDir.getName().toLowerCase();
+            if ((fName.endsWith(".zip") || (fName.endsWith(".json")))) {
+                outputDir = outputDir.getParentFile();
+            }
+            if (!outputDir.exists()) {
+                outputDir.mkdirs();
+            }
+        }
+        return outputDir;
+    }
+
     /**
      * Write this datapackage to an output directory or ZIP file. Creates at least a
      * datapackage.json file and if this Package object holds file-based
@@ -559,10 +590,11 @@ public class Package extends JSONBase{
      */
     public void write (File outputDir, Consumer<Path> callback, boolean zipCompressed) throws Exception {
         this.isArchivePackage = zipCompressed;
-        FileSystem outFs = getTargetFileSystem(outputDir, zipCompressed);
+        File outDir = findOrCreateOutputDir(outputDir, zipCompressed);
+        FileSystem outFs = getTargetFileSystem(outDir, zipCompressed);
         String parentDirName = "";
         if (!zipCompressed) {
-            parentDirName = outputDir.getPath();
+            parentDirName = outDir.getPath();
         }
 
         // only file-based Resources need to be written to the DataPackage, URLs stay as
@@ -576,17 +608,17 @@ public class Package extends JSONBase{
         for (Resource r : resourceList) {
             r.writeData(outFs.getPath(parentDirName ));
             r.writeSchema(outFs.getPath(parentDirName));
+            r.writeDialect(outFs.getPath(parentDirName));
 
             // write out dialect file only if not null or URL
-            String dialectP = r.getPathForWritingDialect();
-            if (null != dialectP) {
-                Path dialectPath = outFs.getPath(parentDirName + File.separator + dialectP);
-                r.getDialect().writeDialect(dialectPath);
-            }
-            Dialect dia = r.getDialect();
+
+            /*Dialect dia = r.getDialect();
             if (null != dia) {
+                String dialectP = r.getPathForWritingDialect();
+                Path dialectPath = outFs.getPath(parentDirName + File.separator + dialectP);
+                dia.writeDialect(dialectPath);
                 dia.setReference(new LocalFileReference(new File(dialectP)));
-            }
+            }*/
         }
         writeDescriptor(outFs, parentDirName);
 
@@ -642,7 +674,7 @@ public class Package extends JSONBase{
      * @throws IOException if writing fails
      */
     public void writeJson (OutputStream output) throws IOException{
-        try (BufferedWriter file = new BufferedWriter(new OutputStreamWriter(output))) {
+        try (BufferedWriter file = new BufferedWriter(new OutputStreamWriter(output, charset))) {
             file.write(this.getJsonNode().toPrettyString());
         }
     }
@@ -655,7 +687,11 @@ public class Package extends JSONBase{
      */
     final void validate() throws IOException, DataPackageException{
         try{
-            Validator.validate(this.getJsonNode());
+            ObjectNode jsonNode = this.getJsonNode();
+            for (Resource r : this.getResources()) {
+                r.validate(this);
+            }
+            Validator.validate(jsonNode);
         } catch(ValidationException | DataPackageException ve){
             if (this.strictValidation){
                 throw ve;
@@ -688,11 +724,14 @@ public class Package extends JSONBase{
     }
 
     @JsonIgnore
-    protected ObjectNode getJsonNode(){
+    private ObjectNode getJsonNode(){
     	ObjectNode objectNode = (ObjectNode) JsonUtil.getInstance().createNode(this);
     	// update any manually set properties
     	this.jsonObject.fields().forEachRemaining(f->{
-            objectNode.set(f.getKey(), f.getValue());
+            // but do not overwrite properties set via the API
+            if (!wellKnownKeys.contains(f.getKey())) {
+                objectNode.set(f.getKey(), f.getValue());
+            }
     	});
 
     	Iterator<Resource> resourceIter = resources.iterator();
@@ -703,7 +742,8 @@ public class Package extends JSONBase{
             // this is ugly. If we encounter a DataResource which should be written to a file via
             // manual setting, do some trickery to not write the DataResource, but a curated version
             // to the package descriptor.
-            ObjectNode obj = (ObjectNode) JsonUtil.getInstance().createNode(resource.getJson());
+            ObjectMapper mapper = JsonUtil.getInstance().getMapper();
+            ObjectNode obj = mapper.convertValue(resource, ObjectNode.class);
             if ((resource instanceof AbstractDataResource) && (resource.shouldSerializeToFile())) {
                 Set<String> datafileNames = resource.getDatafileNamesForWriting();
                 Set<String> outPaths = datafileNames.stream().map((r) -> r+"."+resource.getSerializationFormat()).collect(Collectors.toSet());
@@ -712,6 +752,8 @@ public class Package extends JSONBase{
                 } else {
                     obj.set(JSON_KEY_PATH, JsonUtil.getInstance().createArrayNode(outPaths));
                 }
+                // If a data resource should be saved to file, it should not be inlined as well
+                obj.remove(JSON_KEY_DATA);
                 obj.put(JSON_KEY_FORMAT, resource.getSerializationFormat());
             }
             obj.remove("originalReferences");
@@ -750,7 +792,6 @@ public class Package extends JSONBase{
                     if(this.strictValidation){
                         this.jsonObject = null;
                         this.resources.clear();
-
                         throw dpe;
                     }else{
                         if (dpe instanceof DataPackageValidationException)
@@ -777,8 +818,7 @@ public class Package extends JSONBase{
                 this.errors.add(dpe);
             }
         }
-        Schema schema = buildSchema (jsonNodeSource, basePath, isArchivePackage);
-        setFromJson(jsonNodeSource, this, schema);
+        setFromJson(jsonNodeSource, this);
         this.setId(textValueOrNull(jsonNodeSource, Package.JSON_KEY_ID));
         this.setName(textValueOrNull(jsonNodeSource, Package.JSON_KEY_NAME));
         this.setVersion(textValueOrNull(jsonNodeSource, Package.JSON_KEY_VERSION));
@@ -792,7 +832,7 @@ public class Package extends JSONBase{
         this.setCreated(textValueOrNull(jsonNodeSource, Package.JSON_KEY_CREATED));
         if (jsonNodeSource.has(Package.JSON_KEY_CONTRIBUTORS) &&
                 !jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).isEmpty()) {
-            setContributors(Contributor.fromJson(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS).toString()));
+            setContributors(Contributor.fromJson(jsonNodeSource.get(Package.JSON_KEY_CONTRIBUTORS)));
         }
         if (jsonNodeSource.has(Package.JSON_KEY_KEYWORDS)) {
             ArrayNode arr = (ArrayNode) jsonObject.get(Package.JSON_KEY_KEYWORDS);
@@ -809,7 +849,7 @@ public class Package extends JSONBase{
                 this.setProperty(k, obj);
             }
         });
-        resources.forEach(Resource::validate);
+        resources.forEach((r) -> r.validate(this));
         validate();
     }
 
@@ -820,26 +860,6 @@ public class Package extends JSONBase{
      * @param version the version of the DataPackage
      */
     private void setVersion(String version) {
-        this.version = version;
-        if (StringUtils.isEmpty(version))
-            return;
-        String[] parts = version.replaceAll("\\w", "").split("\\.");
-        if (parts.length == 3) {
-            try {
-                for (String part : parts) {
-                    Integer.parseInt(part);
-                }
-                // do nothing if an exception is thrown, it's just
-                // a datapacke with sloppy version.
-            } catch (Exception ex) { }
-            // we have a SemVer version scheme
-            this.versionParts = new int[3];
-            int cnt = 0;
-            for (String part : parts) {
-                int i = Integer.parseInt(part);
-                versionParts[cnt++] = i;
-            }
-        }
         this.version = version;
     }
 

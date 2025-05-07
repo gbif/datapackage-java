@@ -3,41 +3,34 @@ package io.frictionlessdata.datapackage.resource;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.google.common.io.ByteStreams;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
 import io.frictionlessdata.datapackage.exceptions.DataPackageValidationException;
 import io.frictionlessdata.tableschema.Table;
 import io.frictionlessdata.tableschema.tabledatasource.TableDataSource;
 
-import java.io.*;
-import java.net.URL;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
 
 @JsonInclude(value = Include.NON_EMPTY, content = Include.NON_EMPTY )
-public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C> {
+public class FilebasedResource extends AbstractReferencebasedResource<File> {
+    @JsonIgnore
     private File basePath;
+
+    @JsonIgnore
     private boolean isInArchive;
 
-    public FilebasedResource(Resource fromResource, Collection<File> paths) throws Exception {
-        super(fromResource.getName(), paths);
-        if (null == paths) {
-            throw new DataPackageException("Invalid Resource. " +
-                    "The path property cannot be null for file-based Resources.");
-        }
-        encoding = fromResource.getEncoding();
-        this.setSerializationFormat(sniffFormat(paths));
-        schema = fromResource.getSchema();
-        dialect = fromResource.getDialect();
-        List<String[]> data = fromResource.getData(false, false, false, false);
-        Table table = new Table(data, fromResource.getHeaders(), fromResource.getSchema());
-        tables = new ArrayList<>();
-        tables.add(table);
-        serializeToFile = true;
-    }
+    @JsonIgnore
+    /**
+     * The charset (encoding) for writing
+     */
+    private final Charset charset = StandardCharsets.UTF_8;
 
     public FilebasedResource(String name, Collection<File> paths, File basePath, Charset encoding) {
         super(name, paths);
@@ -46,7 +39,14 @@ public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C>
             throw new DataPackageValidationException("Invalid Resource. " +
                     "The path property cannot be null for file-based Resources.");
         }
-        this.setSerializationFormat(sniffFormat(paths));
+        String format = sniffFormat(paths);
+        if (format.equals(TableDataSource.Format.FORMAT_JSON.getLabel())
+            || format.equals(TableDataSource.Format.FORMAT_CSV.getLabel())) {
+            this.setSerializationFormat(format);
+        } else {
+            super.setFormat(format);
+        }
+
         this.basePath = basePath;
         for (File path : paths) {
             /* from the spec: "SECURITY: / (absolute path) and ../ (relative parent path)
@@ -66,15 +66,30 @@ public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C>
         this(name, paths, basePath, Charset.defaultCharset());
     }
 
+
+    @JsonIgnore
+    public String getSerializationFormat() {
+        if (null != serializationFormat)
+            return serializationFormat;
+        if (null == format) {
+            return format;
+        }
+        return sniffFormat(paths);
+    }
+
     private static String sniffFormat(Collection<File> paths) {
         Set<String> foundFormats = new HashSet<>();
-        paths.forEach((p) -> {
+        for (File p : paths) {
             if (p.getName().toLowerCase().endsWith(TableDataSource.Format.FORMAT_CSV.getLabel())) {
                 foundFormats.add(TableDataSource.Format.FORMAT_CSV.getLabel());
             } else if (p.getName().toLowerCase().endsWith(TableDataSource.Format.FORMAT_JSON.getLabel())) {
                 foundFormats.add(TableDataSource.Format.FORMAT_JSON.getLabel());
+            } else {
+                // something else -> not a tabular resource
+                int pos = p.getName().lastIndexOf('.');
+                return p.getName().substring(pos + 1).toLowerCase();
             }
-        });
+        }
         if (foundFormats.size() > 1) {
             throw new DataPackageException("Resources cannot be mixed JSON/CSV");
         }
@@ -95,10 +110,11 @@ public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C>
     }
 
     @Override
+    @JsonIgnore
     byte[] getRawData(File input)  throws IOException {
         if (this.isInArchive) {
             String fileName = input.getPath().replaceAll("\\\\", "/");
-            return getZipFileContentAsString (basePath.toPath(), fileName).getBytes();
+            return getZipFileContentAsString (basePath.toPath(), fileName).getBytes(charset);
         } else {
             File file = new File(this.basePath, input.getPath());
             try (InputStream inputStream = Files.newInputStream(file.toPath())) {
@@ -121,6 +137,7 @@ public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C>
     }
 
     @Override
+    @JsonIgnore
     List<Table> readData () throws Exception{
         List<Table> tables;
         if (this.isInArchive) {
@@ -158,6 +175,7 @@ public class FilebasedResource<C> extends AbstractReferencebasedResource<File,C>
         return tables;
     }
 
+    @JsonIgnore
     public void setIsInArchive(boolean isInArchive) {
         this.isInArchive = isInArchive;
     }

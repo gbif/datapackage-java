@@ -1,15 +1,18 @@
 package io.frictionlessdata.datapackage.resource;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import io.frictionlessdata.datapackage.Dialect;
-import io.frictionlessdata.datapackage.JSONBase;
+import io.frictionlessdata.datapackage.Package;
+import io.frictionlessdata.datapackage.*;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
 import io.frictionlessdata.datapackage.exceptions.DataPackageValidationException;
 import io.frictionlessdata.tableschema.Table;
+import io.frictionlessdata.tableschema.exception.TypeInferringException;
 import io.frictionlessdata.tableschema.iterator.TableIterator;
 import io.frictionlessdata.tableschema.schema.Schema;
 import io.frictionlessdata.tableschema.tabledatasource.TableDataSource;
@@ -27,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
+import static io.frictionlessdata.datapackage.JSONBase.JSON_KEY_DATA;
 import static io.frictionlessdata.datapackage.Validator.isValidUrl;
 
 
@@ -36,7 +40,8 @@ import static io.frictionlessdata.datapackage.Validator.isValidUrl;
  *
  * Based on specs: http://frictionlessdata.io/specs/data-resource/
  */
-public interface Resource<T,C> {
+@JsonInclude(value= JsonInclude.Include. NON_EMPTY, content= JsonInclude.Include. NON_NULL)
+public interface Resource<T> extends BaseInterface {
 
     String FORMAT_CSV = "csv";
     String FORMAT_JSON = "json";
@@ -46,9 +51,8 @@ public interface Resource<T,C> {
      * @return Table(s)
      * @throws Exception if reading the tables fails.
      */
+    @JsonIgnore
     List<Table> getTables() throws Exception ;
-
-    String getJson();
 
     /**
      * Read all data from a Resource, unmapped and not transformed. This is useful for non-tabular resources
@@ -57,6 +61,7 @@ public interface Resource<T,C> {
      * @throws IOException if reading the data fails
      *
      */
+    @JsonProperty(JSON_KEY_DATA)
     public Object getRawData() throws IOException;
 
     /**
@@ -137,7 +142,44 @@ public interface Resource<T,C> {
      * @return List of rows as bean instances.
      * @param beanClass the Bean class this BeanIterator expects
      */
-    List<C> getData(Class<C> beanClass) throws Exception;
+    <C> List<C> getData(Class<C> beanClass) throws Exception;
+
+    /**
+     * Read all data from all Tables and return it as JSON.
+     *
+     * It ignores relations to other data sources.
+     *
+     * @return A JSON representation of the data as a String.
+     */
+    @JsonIgnore
+    String getDataAsJson();
+
+    /**
+     * Read all data from all Tables and return it as a String in the format of the Resource's Dialect.
+     * Column order will be deducted from the table data source.
+     *
+     * @return A CSV representation of the data as a String.
+     */
+    @JsonIgnore
+    String getDataAsCsv();
+
+    /**
+     * Return the data of all Tables as a CSV string,
+     *
+     * - the `dialect` parameter decides on the CSV options. If it is null, then the file will
+     *    be written as RFC 4180 compliant CSV
+     * - the `schema` parameter decides on the order of the headers in the CSV file. If it is null,
+     *    the Schema of the Resource will be used, or if none, the order of the columns will be
+     *    the same as in the Tables.
+     *
+     * It ignores relations to other data sources.
+     *
+     * @param dialect the CSV dialect to use
+     * @param schema a Schema defining header row names in the order in which data should be exported
+     *
+     * @return A CSV representation of the data as a String.
+     */
+    String getDataAsCsv(Dialect dialect, Schema schema);
 
     /**
      * Write all the data in this resource into one or more
@@ -166,6 +208,15 @@ public interface Resource<T,C> {
      * @throws IOException if something fails while writing
      */
     void writeSchema(Path parentFilePath) throws IOException;
+
+    /**
+     * Write the Resource {@link Dialect} to `outputDir`.
+     *
+     * @param parentFilePath the directory to write to. Code must create
+     *                  files as needed.
+     * @throws IOException if something fails while writing
+     */
+    void writeDialect(Path parentFilePath) throws IOException;
 
     /**
      * Returns an Iterator that returns rows as object-arrays. Values in each column
@@ -203,7 +254,7 @@ public interface Resource<T,C> {
      * @param beanType the Bean class this BeanIterator expects
      * @param relations follow relations to other data source
      */
-    Iterator<C> beanIterator(Class<C> beanType, boolean relations)throws Exception;
+    <C> Iterator<C> beanIterator(Class<C> beanType, boolean relations)throws Exception;
 
     /**
      * This method creates an Iterator that will return table rows as String arrays.
@@ -245,87 +296,6 @@ public interface Resource<T,C> {
     Set<String> getDatafileNamesForWriting();
 
     /**
-     * @return the name
-     */
-    String getName();
-
-    /**
-     * @param name the name to set
-     */
-    void setName(String name);
-
-    /**
-     * @return the profile
-     */
-    String getProfile();
-
-    /**
-     * @param profile the profile to set
-     */
-    void setProfile(String profile);
-
-    /**
-     * @return the title
-     */
-    String getTitle();
-
-    /**
-     * @param title the title to set
-     */
-    void setTitle(String title);
-
-    /**
-     * @return the description
-     */
-    String getDescription();
-
-    /**
-     * @param description the description to set
-     */
-    void setDescription(String description);
-
-
-    /**
-     * @return the mediaType
-     */
-    String getMediaType();
-
-    /**
-     * @param mediaType the mediaType to set
-     */
-    void setMediaType(String mediaType);
-
-    /**
-     * @return the encoding
-     */
-    String getEncoding();
-
-    /**
-     * @param encoding the encoding to set
-     */
-    void setEncoding(String encoding);
-
-    /**
-     * @return the bytes
-     */
-    Integer getBytes();
-
-    /**
-     * @param bytes the bytes to set
-     */
-    void setBytes(Integer bytes);
-
-    /**
-     * @return the hash
-     */
-    String getHash();
-
-    /**
-     * @param hash the hash to set
-     */
-    void setHash(String hash);
-
-    /**
      * @return the dialect
      */
     Dialect getDialect();
@@ -353,29 +323,12 @@ public interface Resource<T,C> {
 
     void setSchema(Schema schema);
 
-    /**
-     * @return the sources
-     */
-    ArrayNode getSources();
+    public Schema inferSchema() throws TypeInferringException;
 
-    /**
-     * @param sources the sources to set
-     */
-    void setSources(ArrayNode sources);
-
-    /**
-     * @return the licenses
-     */
-    ArrayNode getLicenses();
-
-    /**
-     * @param licenses the licenses to set
-     */
-    void setLicenses(ArrayNode licenses);
-
+    @JsonIgnore
     boolean shouldSerializeToFile();
 
-
+    @JsonIgnore
     void setShouldSerializeToFile(boolean serializeToFile);
 
     /**
@@ -386,7 +339,7 @@ public interface Resource<T,C> {
 
     String getSerializationFormat();
 
-    void checkRelations() throws Exception;
+    void checkRelations(Package pkg) throws Exception;
 
     /**
      * Recreate a Resource object from a JSON descriptor, a base path to resolve relative file paths against
@@ -400,11 +353,16 @@ public interface Resource<T,C> {
      * @throws DataPackageException for invalid data
      * @throws Exception if other operation fails.
      */
-    static AbstractResource build(ObjectNode resourceJson, Object basePath, boolean isArchivePackage) throws IOException, DataPackageException, Exception {
+
+    static AbstractResource build(
+            ObjectNode resourceJson,
+            Object basePath,
+            boolean isArchivePackage) throws IOException, DataPackageException, Exception {
         String name = textValueOrNull(resourceJson, JSONBase.JSON_KEY_NAME);
         Object path = resourceJson.get(JSONBase.JSON_KEY_PATH);
-        Object data = resourceJson.get(JSONBase.JSON_KEY_DATA);
+        Object data = resourceJson.get(JSON_KEY_DATA);
         String format = textValueOrNull(resourceJson, JSONBase.JSON_KEY_FORMAT);
+        String profile = textValueOrNull(resourceJson, JSONBase.JSON_KEY_PROFILE);
         Dialect dialect = JSONBase.buildDialect (resourceJson, basePath, isArchivePackage);
         Schema schema = JSONBase.buildSchema(resourceJson, basePath, isArchivePackage);
         String encoding = textValueOrNull(resourceJson, JSONBase.JSON_KEY_ENCODING);
@@ -425,24 +383,42 @@ public interface Resource<T,C> {
             // inlined data
         } else if (data != null){
             if (null == format) {
-                if (!(data instanceof ArrayNode)) {
-                    // from the spec: " a JSON string - in this case the format or
-                    // mediatype properties MUST be provided
-                    // https://specs.frictionlessdata.io/data-resource/#data-inline-data
-                    throw new DataPackageValidationException(
-                            "Invalid Resource. The format property cannot be null for inlined CSV data.");
-                }
-                resource = new JSONDataResource(name, data.toString());
+                resource = buildJsonResource(data, name, null, profile);
             } else if (format.equals(Resource.FORMAT_JSON))
-                resource = new JSONDataResource(name, data.toString());
-            else if (format.equals(Resource.FORMAT_CSV))
-                resource = new CSVDataResource(name, data.toString());
+                resource = buildJsonResource(data, name, format, profile);
+            else if (format.equals(Resource.FORMAT_CSV)) {
+                // data is in inline CSV format like "data": "A,B,C\n1,2,3\n4,5,6"
+                String dataString = ((TextNode)data).textValue().replaceAll("\\\\n", "\n");
+                resource = new CSVDataResource(name, dataString);
+            }
         } else {
             throw new DataPackageValidationException(
                     "Invalid Resource. The path property or the data and format properties cannot be null.");
         }
         resource.setDialect(dialect);
-        JSONBase.setFromJson(resourceJson, resource, schema);
+        JSONBase.setFromJson(resourceJson, resource);
+        resource.setSchema(schema);
+        return resource;
+    }
+
+    private static AbstractResource buildJsonResource(Object data, String name, String format, String profile) {
+        AbstractResource resource = null;
+        if ((data instanceof ArrayNode)) {
+            resource = new JSONDataResource(name, (ArrayNode)data);
+        } else {
+            if ((null != profile) && profile.equalsIgnoreCase(Profile.PROFILE_TABULAR_DATA_RESOURCE) && (StringUtils.isEmpty(format))) {
+                // from the spec: " a JSON string - in this case the format or
+                // mediatype properties MUST be provided
+                // https://specs.frictionlessdata.io/data-resource/#data-inline-data
+                throw new DataPackageValidationException(
+                        "Invalid Resource. The format property cannot be null for inlined CSV data.");
+            } else if ((data instanceof ObjectNode)) {
+                resource = new JSONObjectResource(name, (ObjectNode)data);
+            } else {
+                throw new DataPackageValidationException(
+                        "Invalid Resource. No implementation for inline data of type " + data.getClass().getSimpleName());
+            }
+        }
         return resource;
     }
 
@@ -597,5 +573,5 @@ public interface Resource<T,C> {
     	return source.has(fieldName) ? source.get(fieldName).asText() : null;
     }
 
-    void validate();
+    void validate(Package pkg);
 }

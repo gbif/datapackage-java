@@ -7,6 +7,8 @@ import io.frictionlessdata.datapackage.exceptions.DataPackageException;
 import io.frictionlessdata.datapackage.exceptions.DataPackageFileOrUrlNotFoundException;
 import io.frictionlessdata.datapackage.exceptions.DataPackageValidationException;
 import io.frictionlessdata.datapackage.resource.*;
+import io.frictionlessdata.tableschema.exception.ConstraintsException;
+import io.frictionlessdata.tableschema.exception.TableValidationException;
 import io.frictionlessdata.tableschema.exception.ValidationException;
 import io.frictionlessdata.tableschema.field.DateField;
 import io.frictionlessdata.tableschema.schema.Schema;
@@ -18,7 +20,9 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
@@ -27,9 +31,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileAttribute;
-import java.security.DigestInputStream;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 import static io.frictionlessdata.datapackage.Profile.*;
@@ -42,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * 
  */
 public class PackageTest {
+    private static boolean verbose = false;
     private static URL validUrl;
     static String resource1String = "{\"name\": \"first-resource\", \"path\": " +
             "[\"data/cities.csv\", \"data/cities2.csv\", \"data/cities3.csv\"]}";
@@ -151,7 +155,7 @@ public class PackageTest {
 
         // We're not asserting the String value since the order of the JsonNode elements is not guaranteed.
         // Just compare the length of the String, should be enough.
-        JsonNode obj = createNode(dp.getJson());
+        JsonNode obj = createNode(dp.asJson());
         // a default 'profile' is being set, so the two packages will differ, unless a profile is added to the fixture data
         Assertions.assertEquals(obj.get("resources").size(), createNode(jsonString).get("resources").size());
         Assertions.assertEquals(obj.get("name"), createNode(jsonString).get("name"));
@@ -168,7 +172,7 @@ public class PackageTest {
         
         // Build DataPackage instance based on source file path.
         Package dp = new Package(new File(basePath.toFile(), sourceFileName).toPath(), true);
-        Assertions.assertNotNull(dp.getJson());
+        Assertions.assertNotNull(dp.asJson());
         
         // Check if base path was set properly;
         Assertions.assertEquals(basePath, dp.getBasePath());
@@ -191,7 +195,7 @@ public class PackageTest {
         // But could not resolve AbstractMethodError: https://stackoverflow.com/a/32696152/4030804
 
         Package dp = new Package(validUrl, true);
-        Assertions.assertNotNull(dp.getJson());
+        Assertions.assertNotNull(dp.asJson());
     }
     
     @Test
@@ -212,7 +216,7 @@ public class PackageTest {
                 "/master/src/test/resources/fixtures/simple_invalid_datapackage.json");
         
         Package dp = new Package(url, false);
-        Assertions.assertNotNull(dp.getJson());
+        Assertions.assertNotNull(dp.asJson());
     }
     
     @Test
@@ -377,8 +381,8 @@ public class PackageTest {
         Path resourcePath = TestUtil.getResourcePath(pathName);
         Package dp = new Package(resourcePath, true);
 
-        Resource<?,?> resource = dp.getResource("logo-svg");
-        Assertions.assertTrue(resource instanceof FilebasedResource);
+        Resource<?> resource = dp.getResource("logo-svg");
+        Assertions.assertInstanceOf(FilebasedResource.class, resource);
         byte[] rawData = (byte[])resource.getRawData();
         String s = new String (rawData).replaceAll("[\n\r]+", "\n");
 
@@ -386,7 +390,7 @@ public class PackageTest {
         String t = new String (testData).replaceAll("[\n\r]+", "\n");
         Assertions.assertEquals(t, s);
     }
-/*
+
     @Test
     @DisplayName("Test getting resource data from a non-tabular datapackage, ZIP based")
     public void testNonTabularPackageFromZip() throws Exception{
@@ -394,15 +398,15 @@ public class PackageTest {
         Path resourcePath = TestUtil.getResourcePath(pathName);
         Package dp = new Package(resourcePath, true);
 
-        Resource<?,?> resource = dp.getResource("logo-svg");
-        Assertions.assertTrue(resource instanceof FilebasedResource);
+        Resource<?> resource = dp.getResource("logo-svg");
+        Assertions.assertInstanceOf(FilebasedResource.class, resource);
         byte[] rawData = (byte[])resource.getRawData();
         String s = new String (rawData).replaceAll("[\n\r]+", "\n");
 
         byte[] testData = TestUtil.getResourceContent("/fixtures/files/frictionless-color-full-logo.svg");
         String t = new String (testData).replaceAll("[\n\r]+", "\n");
         Assertions.assertEquals(t, s);
-    }*/
+    }
 
 
     @Test
@@ -413,8 +417,8 @@ public class PackageTest {
 
         Package dp = new Package(input, true);
 
-        Resource<?,?> resource = dp.getResource("logo-svg");
-        Assertions.assertTrue(resource instanceof URLbasedResource);
+        Resource<?> resource = dp.getResource("logo-svg");
+        Assertions.assertInstanceOf(URLbasedResource.class, resource);
         byte[] rawData = (byte[])resource.getRawData();
         String s = new String (rawData).replaceAll("[\n\r]+", "\n");
 
@@ -503,7 +507,7 @@ public class PackageTest {
     public void testCreateInvalidJSONResource() throws Exception {
         Package dp = this.getDataPackageFromFilePath(true);
         DataPackageException dpe = assertThrows(DataPackageException.class,
-                () -> {Resource res = new JSONDataResource(null, testResources.toString());
+                () -> {Resource res = new JSONDataResource(null, testResources);
                     dp.addResource(res);});
         Assertions.assertEquals("Invalid Resource, it does not have a name property.", dpe.getMessage());
     }
@@ -522,7 +526,7 @@ public class PackageTest {
             files.add(new File(s));
         }
         Resource resource = Resource.build("third-resource", files, basePath, TableDataSource.getDefaultEncoding());
-        Assertions.assertTrue(resource instanceof FilebasedResource);
+        Assertions.assertInstanceOf(FilebasedResource.class, resource);
 
         DataPackageException dpe = assertThrows(DataPackageException.class, () -> dp.addResource(resource));
         Assertions.assertEquals("A resource with the same name already exists.", dpe.getMessage());
@@ -540,8 +544,8 @@ public class PackageTest {
             files.add(new File(s));
         }
         Resource resource = Resource.build("third-resource", files, basePath, TableDataSource.getDefaultEncoding());
-        Assertions.assertTrue(resource instanceof FilebasedResource);
-        dp.addResource((FilebasedResource)resource);
+        Assertions.assertInstanceOf(FilebasedResource.class, resource);
+        dp.addResource(resource);
         
         Assertions.assertEquals(1, dp.getErrors().size());
         Assertions.assertEquals("A resource with the same name already exists.", dp.getErrors().get(0).getMessage());
@@ -556,9 +560,9 @@ public class PackageTest {
         savedPackage.write(tempDirPath.toFile(), false);
 
         Package readPackage = new Package(tempDirPath.resolve(Package.DATAPACKAGE_FILENAME),false);
-        JsonNode readPackageJson = createNode(readPackage.getJson()) ;
-        JsonNode savedPackageJson = createNode(savedPackage.getJson()) ;
-        Assertions.assertTrue(readPackageJson.equals(savedPackageJson));
+        JsonNode readPackageJson = createNode(readPackage.asJson()) ;
+        JsonNode savedPackageJson = createNode(savedPackage.asJson()) ;
+        Assertions.assertEquals(readPackageJson, savedPackageJson);
     }
     
     @Test
@@ -574,8 +578,8 @@ public class PackageTest {
         Package readPackage = new Package(createdFile.toPath(), false);
         
         // Check if two data packages are have the same key/value pairs.
-        String expected = readPackage.getJson();
-        String actual = originalPackage.getJson();
+        String expected = readPackage.asJson();
+        String actual = originalPackage.asJson();
         Assertions.assertEquals(expected, actual);
     }
 
@@ -672,7 +676,9 @@ public class PackageTest {
         File dir = new File (tempDirPath.toFile(), "with-image");
         Path dirPath = Files.createDirectory(dir.toPath(), new FileAttribute[] {});
         pkg.write(dirPath.toFile(), false);
-        System.out.println(tempDirPath);
+        if (verbose) {
+            System.out.println(tempDirPath);
+        }
         File descriptor = new File (dir, "datapackage.json");
         String json = String.join("\n", Files.readAllLines(descriptor.toPath()));
         Assertions.assertFalse(json.contains("\"imageData\""));
@@ -692,7 +698,14 @@ public class PackageTest {
         Package dp = new Package(createdFile.toPath(), true);
         dp.setImage("logo/ file.svg", fileData);
         dp.write(new File(tempDirPath.toFile(), "with-image.zip"), true);
-        System.out.println(tempDirPath);
+        if (verbose) {
+            System.out.println(tempDirPath);
+        }
+
+        File withImageFile = new File(tempDirPath.toFile(), "with-image.zip");
+        Package withImageDp = new Package(withImageFile.toPath(), true);
+        byte[] readImageData = withImageDp.getImage();
+        Assertions.assertArrayEquals(fileData, readImageData);
     }
 
 
@@ -705,9 +718,11 @@ public class PackageTest {
         Path tempDirPath = Files.createTempDirectory("datapackage-");
 
         File dir = new File (tempDirPath.toFile(), "test-package");
-        Path dirPath = Files.createDirectory(dir.toPath(), new FileAttribute[] {});
+        Path dirPath = Files.createDirectory(dir.toPath());
         pkg.write(dirPath.toFile(), PackageTest::fingerprintFiles, false);
-        System.out.println(tempDirPath);
+        if (verbose) {
+            System.out.println(tempDirPath);
+        }
         File fingerprints = new File (dir, "fingerprints.txt");
         String content = String.join("\n", Files.readAllLines(fingerprints.toPath()));
         String refContent =
@@ -720,10 +735,7 @@ public class PackageTest {
     public void testMultiPathIterationForLocalFiles() throws Exception{
         Package pkg = this.getDataPackageFromFilePath(true);
         Resource resource = pkg.getResource("first-resource");
-        
-        // Set the profile to tabular data resource.
-        resource.setProfile(Profile.PROFILE_TABULAR_DATA_RESOURCE);
-        
+
         // Expected data.
         List<String[]> expectedData = this.getAllCityData();
         
@@ -784,8 +796,8 @@ public class PackageTest {
         Assertions.assertEquals(expectedSchema, resource.getSchema());
 
         // Get JSON Object
-        JsonNode expectedSchemaJson = createNode(expectedSchema.getJson());
-        JsonNode testSchemaJson = createNode(resource.getSchema().getJson());
+        JsonNode expectedSchemaJson = createNode(expectedSchema.asJson());
+        JsonNode testSchemaJson = createNode(resource.getSchema().asJson());
         // Compare JSON objects
         Assertions.assertEquals(expectedSchemaJson, testSchemaJson, "Schemas don't match");
     }
@@ -802,8 +814,8 @@ public class PackageTest {
         Assertions.assertEquals(expectedSchema, resource.getSchema());
 
         // Get JSON Object
-        JsonNode expectedSchemaJson = createNode(expectedSchema.getJson());
-        JsonNode testSchemaJson = createNode(resource.getSchema().getJson());
+        JsonNode expectedSchemaJson = createNode(expectedSchema.asJson());
+        JsonNode testSchemaJson = createNode(resource.getSchema().asJson());
         // Compare JSON objects
         Assertions.assertEquals(expectedSchemaJson, testSchemaJson, "Schemas don't match");
     }
@@ -922,21 +934,153 @@ public class PackageTest {
         Assertions.assertEquals(90, info.get("ssn"));
     }
 
+    @Test
+    @DisplayName("Test read a Package with all fields defined in https://specs.frictionlessdata.io/data-package/#metadata")
+    public void testReadPackageAllFields() throws Exception{
+        Path pkgFile =  TestUtil.getResourcePath("/fixtures/full_spec_datapackage.json");
+        Package p = new Package(pkgFile, false);
+        Assertions.assertEquals( "9e2429be-a43e-4051-aab5-981eb27fe2e8", p.getId());
+        Assertions.assertEquals( "world-full", p.getName());
+        Assertions.assertEquals( "world population data", p.getTitle());
+        Assertions.assertEquals( "tabular-data-package", p.getProfile());
+        Assertions.assertEquals("A datapackage for world population data, featuring all fields from https://specs.frictionlessdata.io/data-package/#language", p.getDescription());
+        Assertions.assertEquals("1.0.1", p.getVersion());
+        Assertions.assertEquals( "https://example.com/world-population-data", p.getHomepage().toString());
+        Assertions.assertEquals(1, p.getLicenses().size());
+        Assertions.assertEquals(1, p.getSources().size());
+        Assertions.assertEquals(2, p.getContributors().size());
+        Assertions.assertArrayEquals(new String[] {"world", "population", "world bank"}, p.getKeywords().toArray());
+        Assertions.assertEquals( "https://github.com/frictionlessdata/datapackage-java/tree/main/src/test/resources/fixtures/datapackages/with-image/test.png", p.getImagePath());
+        Assertions.assertEquals(ZonedDateTime.parse("1985-04-12T23:20:50.52Z"), p.getCreated());
+        Assertions.assertEquals(1, p.getResources().size());
+
+        License license = p.getLicenses().get(0);
+        Assertions.assertEquals("ODC-PDDL-1.0", license.getName());
+        Assertions.assertEquals("http://opendatacommons.org/licenses/pddl/", license.getPath());
+        Assertions.assertEquals("Open Data Commons Public Domain Dedication and License v1.0", license.getTitle());
+
+        Source source = p.getSources().get(0);
+        Assertions.assertEquals("http://data.worldbank.org/indicator/NY.GDP.MKTP.CD", source.getPath());
+        Assertions.assertEquals("World Bank and OECD", source.getTitle());
+
+        Contributor c = p.getContributors().get(1);
+        Assertions.assertEquals("Jim Beam", c.getTitle());
+        Assertions.assertEquals("jim@example.com", c.getEmail());
+        Assertions.assertEquals("https://www.example.com", c.getPath().toString());
+        Assertions.assertEquals("wrangler", c.getRole());
+        Assertions.assertEquals("Example Corp", c.getOrganization());
+    }
+
+    @Test
+    // check for https://github.com/frictionlessdata/datapackage-java/issues/46
+    @DisplayName("Show that minimum constraints work")
+    void validateDataPackage() throws Exception {
+        Package dp = this.getDataPackageFromFilePath(
+                "/fixtures/datapackages/constraint-violation/datapackage.json", true);
+        Resource resource = dp.getResource("person_data");
+        ConstraintsException exception = assertThrows(ConstraintsException.class, () -> resource.getData(false, false, true, false));
+
+        // Assert the validation messages
+        Assertions.assertNotNull(exception.getMessage());
+        Assertions.assertFalse(exception.getMessage().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Datapackage with same data in different formats, lenient validation")
+    void validateDataPackageDifferentFormats() throws Exception {
+        Path resourcePath = TestUtil.getResourcePath("/fixtures/datapackages/different-data-formats_incl_invalid/datapackage.json");
+        Package dp = new Package(resourcePath, false);
+        List<Object[]> teamsWithHeaders = dp.getResource("teams_with_headers_csv_file_with_schema").getData(false, false, true, false);
+        List<Object[]> teamsWithHeadersCsvFileNoSchema = dp.getResource("teams_with_headers_csv_file_no_schema").getData(false, false, true, false);
+        List<Object[]> teamsNoHeadersCsvFileNoSchema = dp.getResource("teams_no_headers_csv_file_no_schema").getData(false, false, true, false);
+        List<Object[]> teamsNoHeadersCsvInlineNoSchema = dp.getResource("teams_no_headers_inline_csv_no_schema").getData(false, false, true, false);
+
+        List<Object[]> teamsArraysInline = dp.getResource("teams_arrays_inline_with_headers_with_schema").getData(false, false, true, false);
+        List<Object[]> teamsObjectsInline = dp.getResource("teams_objects_inline_with_schema").getData(false, false, true, false);
+        List<Object[]> teamsArrays = dp.getResource("teams_arrays_file_with_headers_with_schema").getData(false, false, true, false);
+        List<Object[]> teamsObjects = dp.getResource("teams_objects_file_with_schema").getData(false, false, true, false);
+        List<Object[]> teamsArraysInlineNoSchema = dp.getResource("teams_arrays_inline_with_headers_no_schema").getData(false, false, true, false);
+
+        // ensure tables without headers throw errors on reading if a Schema is set
+        TableValidationException ex = assertThrows(TableValidationException.class,
+                () -> dp.getResource("teams_arrays_no_headers_inline_with_schema").getData(false, false, true, false));
+        Assertions.assertEquals("Field 'id' not found in table headers or table has no headers.", ex.getMessage());
+
+        TableValidationException ex2 = assertThrows(TableValidationException.class,
+                () -> dp.getResource("teams_no_headers_inline_csv_with_schema").getData(false, false, true, false));
+        Assertions.assertEquals("Field 'id' not found in table headers or table has no headers.", ex2.getMessage());
+
+        TableValidationException ex3 = assertThrows(TableValidationException.class,
+                () -> dp.getResource("teams_no_headers_csv_file_with_schema").getData(false, false, true, false));
+        Assertions.assertEquals("Field 'id' not found in table headers or table has no headers.", ex3.getMessage());
+
+        Assertions.assertArrayEquals(getFullTeamsData().toArray(), teamsWithHeaders.toArray());
+        Assertions.assertArrayEquals(getFullTeamsData().toArray(), teamsArraysInline.toArray());
+        Assertions.assertArrayEquals(getFullTeamsData().toArray(), teamsObjectsInline.toArray());
+        Assertions.assertArrayEquals(getFullTeamsData().toArray(), teamsArrays.toArray());
+        Assertions.assertArrayEquals(getFullTeamsData().toArray(), teamsObjects.toArray());
+
+        // those without Schema lose the type information. With header row means all data is there
+        Assertions.assertArrayEquals(getFullTeamsDataString().toArray(), teamsWithHeadersCsvFileNoSchema.toArray());
+        Assertions.assertArrayEquals(getFullTeamsDataString().toArray(), teamsArraysInlineNoSchema.toArray());
+
+        // those without a header row and with no Schema will lose the first row of data (skipped as a header row). Seems wrong but that's what the python port does
+        Assertions.assertArrayEquals(getTeamsDataStringMissingFirstRow().toArray(), teamsNoHeadersCsvFileNoSchema.toArray());
+        Assertions.assertArrayEquals(getTeamsDataStringMissingFirstRow().toArray(), teamsNoHeadersCsvInlineNoSchema.toArray());
+    }
+
+    @Test
+    @DisplayName("Datapackage with same data in different valid formats, strict validation")
+    void validateDataPackageDifferentFormatsStrict() throws Exception {
+        Path resourcePath = TestUtil.getResourcePath("/fixtures/datapackages/different-valid-data-formats/datapackage.json");
+        Package dp = new Package(resourcePath, true);
+
+        List<Object[]> teamsWithHeaders = dp.getResource("teams_with_headers_csv_file").getData(false, false, true, false);
+        List<Object[]> teamsArraysInline = dp.getResource("teams_arrays_inline").getData(false, false, true, false);
+        List<Object[]> teamsObjectsInline = dp.getResource("teams_objects_inline").getData(false, false, true, false);
+        List<Object[]> teamsArrays = dp.getResource("teams_arrays_file").getData(false, false, true, false);
+        List<Object[]> teamsObjects = dp.getResource("teams_objects_file").getData(false, false, true, false);
+
+        Assertions.assertArrayEquals(teamsWithHeaders.toArray(), getFullTeamsData().toArray());
+        Assertions.assertArrayEquals(teamsArraysInline.toArray(), getFullTeamsData().toArray());
+        Assertions.assertArrayEquals(teamsObjectsInline.toArray(), getFullTeamsData().toArray());
+        Assertions.assertArrayEquals(teamsArrays.toArray(), getFullTeamsData().toArray());
+        Assertions.assertArrayEquals(teamsObjects.toArray(), getFullTeamsData().toArray());
+    }
+
+    private static List<Object[]> getFullTeamsData() {
+        List<Object[]> expectedData = new ArrayList<>();
+        expectedData.add(new Object[]{BigInteger.valueOf(1), "Arsenal", "London"});
+        expectedData.add(new Object[]{BigInteger.valueOf(2), "Real", "Madrid"});
+        expectedData.add(new Object[]{BigInteger.valueOf(3), "Bayern", "Munich"});
+        return expectedData;
+    }
+
+    private static List<Object[]> getFullTeamsDataString() {
+        List<Object[]> expectedData = new ArrayList<>();
+        expectedData.add(new Object[]{"1", "Arsenal", "London"});
+        expectedData.add(new Object[]{"2", "Real", "Madrid"});
+        expectedData.add(new Object[]{"3", "Bayern", "Munich"});
+        return expectedData;
+    }
+
+    private static List<Object[]> getTeamsDataStringMissingFirstRow() {
+        List<Object[]> expectedData = new ArrayList<>();
+        expectedData.add(new Object[]{"2", "Real", "Madrid"});
+        expectedData.add(new Object[]{"3", "Bayern", "Munich"});
+        return expectedData;
+    }
+
+
     private static void fingerprintFiles(Path path) {
-        System.out.println(path);
         List<String> fingerprints = new ArrayList<>();
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("SHA-256");
-
-            for (File f : path.toFile().listFiles()) {
+            File[] files = path.toFile().listFiles();
+            TreeSet<File> sortedFiles = new TreeSet<>(Arrays.asList(files));
+            for (File f : sortedFiles) {
                 if (f.isFile()) {
-                    /*try (DigestInputStream dis = new DigestInputStream(Files.newInputStream(f.toPath()), md)) {
-                        while (true) {
-                            if (dis.read() == -1) break;
-                        }
-                        md = dis.getMessageDigest();
-                    }*/
                     String content = String.join("\n", Files.readAllLines(f.toPath()));
                     content = content.replaceAll("[\\n\\r]+", "\n");
                     md.digest(content.getBytes());

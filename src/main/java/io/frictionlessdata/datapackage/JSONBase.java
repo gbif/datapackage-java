@@ -1,9 +1,10 @@
 package io.frictionlessdata.datapackage;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.frictionlessdata.datapackage.exceptions.DataPackageException;
@@ -34,8 +35,7 @@ import java.util.zip.ZipFile;
 import static io.frictionlessdata.datapackage.Validator.isValidUrl;
 
 @JsonInclude(value = Include.NON_EMPTY, content = Include.NON_EMPTY )
-public abstract class JSONBase {
-    static final int JSON_INDENT_FACTOR = 4;// JSON keys.
+public abstract class JSONBase implements BaseInterface {
     public static final String JSON_KEY_NAME = "name";
     public static final String JSON_KEY_PROFILE = "profile";
     public static final String JSON_KEY_PATH = "path";
@@ -55,6 +55,7 @@ public abstract class JSONBase {
     /**
      * If true, we are reading from an archive format, eg. ZIP
      */
+    @JsonIgnore
     boolean isArchivePackage = false;
     // Metadata properties.
     // Required properties.
@@ -67,19 +68,15 @@ public abstract class JSONBase {
     protected String title = null;
     protected String description = null;
 
-    String format = null;
     protected String mediaType = null;
     protected String encoding = null;
     protected Integer bytes = null;
     protected String hash = null;
 
-    Dialect dialect;
-    private ArrayNode sources = null;
-    private ArrayNode licenses = null;
+    private List<Source> sources = null;
+    private List<License> licenses = null;
 
-    // Schema
-    private Schema schema = null;
-
+    @JsonIgnore
     protected Map<String, String> originalReferences = new HashMap<>();
     /**
      * @return the name
@@ -95,20 +92,6 @@ public abstract class JSONBase {
      * @return the profile
      */
     public String getProfile(){return profile;}
-
-    /**
-     * @param profile the profile to set
-     */
-    public void setProfile(String profile){
-        if (profile.equals(Profile.PROFILE_TABULAR_DATA_PACKAGE)) {
-            if (this instanceof Package) {
-
-            } else if (this instanceof Resource) {
-                throw new DataPackageValidationException("Cannot set "+Profile.PROFILE_TABULAR_DATA_PACKAGE+" on a resource");
-            }
-        }
-        this.profile = profile;
-    }
 
     /**
      * @return the title
@@ -171,28 +154,24 @@ public abstract class JSONBase {
      */
     public void setHash(String hash){this.hash = hash;}
 
-    public Schema getSchema(){return schema;}
-
-    public void setSchema(Schema schema){this.schema = schema;}
-
-    public ArrayNode getSources(){
+    public List<Source> getSources(){
         return sources;
     }
 
-    public void setSources(ArrayNode sources){
+    public void setSources(List<Source> sources){
         this.sources = sources;
     }
     /**
      * @return the licenses
      */
-    public ArrayNode getLicenses(){return  licenses;}
+    public List<License> getLicenses(){return  licenses;}
 
     /**
      * @param licenses the licenses to set
      */
-    public void setLicenses(ArrayNode licenses){this.licenses = licenses;}
+    public void setLicenses(List<License> licenses){this.licenses = licenses;}
 
-
+    @JsonIgnore
     public Map<String, String> getOriginalReferences() {
         return originalReferences;
     }
@@ -242,7 +221,7 @@ public abstract class JSONBase {
         return ref;
     }
 
-    public static void setFromJson(JsonNode resourceJson, JSONBase retVal, Schema schema) {
+    public static void setFromJson(JsonNode resourceJson, JSONBase retVal) {
         if (resourceJson.has(JSONBase.JSON_KEY_SCHEMA) && resourceJson.get(JSONBase.JSON_KEY_SCHEMA).isTextual())
             retVal.originalReferences.put(JSONBase.JSON_KEY_SCHEMA, resourceJson.get(JSONBase.JSON_KEY_SCHEMA).asText());
         if (resourceJson.has(JSONBase.JSON_KEY_DIALECT) && resourceJson.get(JSONBase.JSON_KEY_DIALECT).isTextual())
@@ -258,17 +237,16 @@ public abstract class JSONBase {
         Integer bytes = resourceJson.has(JSONBase.JSON_KEY_BYTES) ? resourceJson.get(JSONBase.JSON_KEY_BYTES).asInt() : null;
         String hash = textValueOrNull(resourceJson, JSONBase.JSON_KEY_HASH);
 
-        ArrayNode sources = null;
+        List<Source> sources = null;
         if(resourceJson.has(JSONBase.JSON_KEY_SOURCES) && resourceJson.get(JSON_KEY_SOURCES).isArray()) {
-        	sources = (ArrayNode) resourceJson.get(JSON_KEY_SOURCES);
+        	sources = JsonUtil.getInstance().deserialize(resourceJson.get(JSONBase.JSON_KEY_SOURCES), new TypeReference<>() {});
         }
-        ArrayNode licenses = null;
+        List<License> licenses = null;
         if(resourceJson.has(JSONBase.JSON_KEY_LICENSES) && resourceJson.get(JSONBase.JSON_KEY_LICENSES).isArray()){
-        	licenses = (ArrayNode) resourceJson.get(JSONBase.JSON_KEY_LICENSES);
+            licenses = JsonUtil.getInstance().deserialize(resourceJson.get(JSONBase.JSON_KEY_LICENSES), new TypeReference<>() {});
         }
 
         retVal.setName(name);
-        retVal.setSchema(schema);
         retVal.setProfile(profile);
         retVal.setTitle(title);
         retVal.setDescription(description);
