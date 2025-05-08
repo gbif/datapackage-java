@@ -12,11 +12,11 @@
     </issueManagement>
 
     <scm>
-        <url>https://github.com/gbif/github-maven-example</url>
+        <url>https://github.com/gbif/datapackage-java</url>
         <connection>scm:git:git://github.com/gbif/datapackage-java.git</connection>
         <developerConnection>scm:git:git@github.com:gbif/datapackage-java.git</developerConnection>
-      <tag>HEAD</tag>
-  </scm>
+        <tag>HEAD</tag>
+    </scm>
 
     <distributionManagement>
         <repository>
@@ -101,14 +101,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
                 <version>${maven-source-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar-no-fork</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
 
             <plugin>
@@ -159,24 +151,6 @@
                 <groupId>org.eluder.coveralls</groupId>
                 <artifactId>coveralls-maven-plugin</artifactId>
                 <version>${coveralls-maven-plugin.version}</version>
-            </plugin>
-
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>${jacoco-maven-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <id>analyze-report</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>analyze-report</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/dependency-report</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
 
             <plugin>
