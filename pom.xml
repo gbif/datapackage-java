@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.frictionlessdata</groupId>
     <artifactId>datapackage-java</artifactId>
-    <version>0.9.2-gbif</version>
+    <version>0.9.3-gbif-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <issueManagement>
@@ -15,7 +15,7 @@
         <url>https://github.com/gbif/datapackage-java</url>
         <connection>scm:git:git://github.com/gbif/datapackage-java.git</connection>
         <developerConnection>scm:git:git@github.com:gbif/datapackage-java.git</developerConnection>
-        <tag>datapackage-java-0.9.2-gbif</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <distributionManagement>
