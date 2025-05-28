@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.frictionlessdata</groupId>
     <artifactId>datapackage-java</artifactId>
-    <version>0.9.3-gbif-SNAPSHOT</version>
+    <version>0.9.2.1-gbif-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <issueManagement>
@@ -36,7 +36,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <maven.compiler.compiler>${java.version}</maven.compiler.compiler>
-        <tableschema-java-version>0.9.2-gbif</tableschema-java-version>
+        <tableschema-java-version>0.9.2.1-gbif-SNAPSHOT</tableschema-java-version>
         <junit.version>5.12.2</junit.version>
         <slf4j-simple.version>2.0.17</slf4j-simple.version>
         <apache-commons-collections4.version>4.5.0</apache-commons-collections4.version>
