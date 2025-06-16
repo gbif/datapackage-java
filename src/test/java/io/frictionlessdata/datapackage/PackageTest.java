@@ -931,9 +931,20 @@ public class PackageTest {
 
     @Test
     @DisplayName("Test read a Package with all fields defined in https://specs.frictionlessdata.io/data-package/#metadata")
-    public void testReadPackageAllFields() throws Exception{
+    public void testReadPackageAllFieldsSerializeAndReadBack() throws Exception{
         Path pkgFile =  TestUtil.getResourcePath("/fixtures/full_spec_datapackage.json");
         Package p = new Package(pkgFile, false);
+        verifyPackage(p);
+
+        Path tempDirPath = Files.createTempDirectory("datapackage-");
+        File tmpFile = new File(tempDirPath.toFile(), "output");
+        p.write(tmpFile, false);
+
+        Package readPackage = new Package(tmpFile.toPath(), false);
+        verifyPackage(readPackage);
+    }
+
+    private void verifyPackage(Package p) {
         Assertions.assertEquals( "9e2429be-a43e-4051-aab5-981eb27fe2e8", p.getId());
         Assertions.assertEquals( "world-full", p.getName());
         Assertions.assertEquals( "world population data", p.getTitle());
