@@ -39,11 +39,6 @@ import static io.frictionlessdata.datapackage.Profile.*;
 import static io.frictionlessdata.datapackage.TestUtil.getBasePath;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-
-/**
- *
- * 
- */
 public class PackageTest {
     private static boolean verbose = false;
     private static URL validUrl;
@@ -958,13 +953,17 @@ public class PackageTest {
         Assertions.assertEquals("ODC-PDDL-1.0", license.getName());
         Assertions.assertEquals("http://opendatacommons.org/licenses/pddl/", license.getPath());
         Assertions.assertEquals("Open Data Commons Public Domain Dedication and License v1.0", license.getTitle());
+        Assertions.assertEquals(Map.of("scope", "data"), license.getAdditionalProperties());
 
         Source source = p.getSources().get(0);
         Assertions.assertEquals("http://data.worldbank.org/indicator/NY.GDP.MKTP.CD", source.getPath());
         Assertions.assertEquals("World Bank and OECD", source.getTitle());
+        Assertions.assertEquals(Map.of("version", "1"), source.getAdditionalProperties());
 
         Contributor c = p.getContributors().get(1);
         Assertions.assertEquals("Jim Beam", c.getTitle());
+        Assertions.assertEquals("Jim", c.getFirstName());
+        Assertions.assertEquals("Beam", c.getLastName());
         Assertions.assertEquals("jim@example.com", c.getEmail());
         Assertions.assertEquals("https://www.example.com", c.getPath().toString());
         Assertions.assertEquals("wrangler", c.getRole());

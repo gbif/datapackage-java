@@ -7,7 +7,8 @@
     {
       "name": "ODC-PDDL-1.0",
       "path": "http://opendatacommons.org/licenses/pddl/",
-      "title": "Open Data Commons Public Domain Dedication and License v1.0"
+      "title": "Open Data Commons Public Domain Dedication and License v1.0",
+      "scope": "data"
     }
   ],
   "description": "A datapackage for world population data, featuring all fields from https://specs.frictionlessdata.io/data-package/#language",
@@ -15,7 +16,8 @@
   "version": "1.0.1",
   "sources": [{
     "title": "World Bank and OECD",
-    "path": "http://data.worldbank.org/indicator/NY.GDP.MKTP.CD"
+    "path": "http://data.worldbank.org/indicator/NY.GDP.MKTP.CD",
+    "version": "1"
   }],
   "contributors": [{
     "title": "Joe Bloggs",
@@ -25,6 +27,8 @@
     },
     {
       "title": "Jim Beam",
+      "firstName": "Jim",
+      "lastName": "Beam",
       "email": "jim@example.com",
       "path": "https://www.example.com",
       "role": "wrangler",
