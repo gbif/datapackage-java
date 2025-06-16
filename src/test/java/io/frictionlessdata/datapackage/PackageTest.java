@@ -979,6 +979,10 @@ public class PackageTest {
         Assertions.assertEquals("https://www.example.com", c.getPath().toString());
         Assertions.assertEquals("wrangler", c.getRole());
         Assertions.assertEquals("Example Corp", c.getOrganization());
+
+        // Custom GBIF property for Camtrap DP: gbifIngestion/observationLevel
+        Assertions.assertNotNull(p.getProperty("gbifIngestion"));
+        Assertions.assertEquals("media", ((Map) p.getProperty("gbifIngestion")).get("observationLevel"));
     }
 
     @Test
