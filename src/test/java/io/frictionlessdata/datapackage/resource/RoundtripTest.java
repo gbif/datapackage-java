@@ -7,7 +7,6 @@ import io.frictionlessdata.tableschema.schema.Schema;
 import io.frictionlessdata.tableschema.tabledatasource.TableDataSource;
 import org.apache.commons.csv.CSVFormat;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +66,6 @@ public class RoundtripTest {
         }
     }
 
-    @Disabled("Field 'cola' not found in table headers or table has no headers.")
     @Test
     @DisplayName("Roundtrip resource")
     void validateResourceRoundtrip() throws Exception {
@@ -84,7 +82,6 @@ public class RoundtripTest {
         Assertions.assertArrayEquals(referenceData.toArray(), testData.toArray());
     }
 
-    @Disabled("Field 'cola' not found in table headers or table has no headers.")
     @Test
     @DisplayName("Create data resource, compare descriptor")
     void validateCreateResourceDescriptorRoundtrip() throws Exception {
@@ -114,7 +111,6 @@ public class RoundtripTest {
         );
     }
 
-    @Disabled("Field 'cola' not found in table headers or table has no headers.")
     @Test
     @DisplayName("Create data resource and make it write to file, compare descriptor")
     void validateCreateResourceDescriptorRoundtrip2() throws Exception {
