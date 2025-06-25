@@ -68,6 +68,12 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
     boolean serializeToFile = true;
 
     @JsonIgnore
+    boolean serializeSchemaToFile = true;
+
+    @JsonIgnore
+    boolean serializeFullSchema = false;
+
+    @JsonIgnore
     String serializationFormat;
 
     @JsonIgnore
@@ -82,7 +88,7 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
 
     @JsonProperty(JSON_KEY_SCHEMA)
     public Object getSchemaForJson() {
-        if (originalReferences.containsKey(JSON_KEY_SCHEMA)) {
+        if (originalReferences.containsKey(JSON_KEY_SCHEMA) && !this.shouldSerializeFullSchema()) {
             return originalReferences.get(JSON_KEY_SCHEMA);
         }
         if (null != schema) {
@@ -593,7 +599,9 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
      */
     private String getPathForWritingSchemaOrDialect(String key, Object objectWithRes, FileReference reference) {
         // write out schema file only if not null or URL
-        if (null == objectWithRes) {
+        if (!this.shouldSerializeSchemaToFile()) {
+          return null;
+        } else if (null == objectWithRes) {
             return null;
         } else if ((reference instanceof URLFileReference)){
             return null;
@@ -692,8 +700,30 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
     }
 
     @Override
+    @JsonIgnore
+    public boolean shouldSerializeSchemaToFile() {
+      return serializeSchemaToFile;
+    }
+
+    @Override
+    @JsonIgnore
+    public boolean shouldSerializeFullSchema() {
+      return serializeFullSchema;
+    }
+
+    @Override
     public void setShouldSerializeToFile(boolean serializeToFile) {
         this.serializeToFile = serializeToFile;
+    }
+
+    @Override
+    public void setShouldSerializeSchemaToFile(boolean serializeSchemaToFile) {
+      this.serializeSchemaToFile = serializeSchemaToFile;
+    }
+
+    @Override
+    public void setShouldSerializeFullSchema(boolean serializeFullSchema) {
+      this.serializeFullSchema = serializeFullSchema;
     }
 
     @Override

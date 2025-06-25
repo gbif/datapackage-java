@@ -329,7 +329,19 @@ public interface Resource<T> extends BaseInterface {
     boolean shouldSerializeToFile();
 
     @JsonIgnore
-    void setShouldSerializeToFile(boolean serializeToFile);
+    void setShouldSerializeToFile(boolean serializeSchemaToFile);
+
+    @JsonIgnore
+    boolean shouldSerializeSchemaToFile();
+
+    @JsonIgnore
+    boolean shouldSerializeFullSchema();
+
+    @JsonIgnore
+    void setShouldSerializeSchemaToFile(boolean serializeSchemaToFile);
+
+    @JsonIgnore
+    void setShouldSerializeFullSchema(boolean serializeSchemaToFile);
 
     /**
      * Sets the format (either CSV or JSON) for serializing the Resource content to File.

@@ -463,8 +463,25 @@ public class NonTabularResourceTest {
         }
 
         @Override
+        public boolean shouldSerializeSchemaToFile() {
+          return true;
+        }
+
+        @Override
+        public boolean shouldSerializeFullSchema() {
+          return false;
+        }
+
+        @Override
         public void setShouldSerializeToFile(boolean b) {
         }
+
+        @Override
+        public void setShouldSerializeSchemaToFile(boolean b) {
+        }
+
+        @Override
+        public void setShouldSerializeFullSchema(boolean b) {}
 
         @Override
         public void setSerializationFormat(String s) {
