@@ -100,7 +100,6 @@ public class RoundtripTest {
         Path tempDirPath = Files.createTempDirectory("datapackage-");
         File createdFile = new File(tempDirPath.toFile(), "test_save_datapackage.zip");
         pkg.write(createdFile, true);
-        System.out.println(tempDirPath);
 
         // create new Package from the serialized form and check they are equal
         Package testPkg = new Package(createdFile.toPath(), true);
@@ -183,6 +182,7 @@ public class RoundtripTest {
             "    \"name\" : \"test3\",\n" +
             "    \"profile\" : \"tabular-data-resource\",\n" +
             "    \"encoding\" : \"utf-8\",\n" +
+            "    \"format\" : \"csv\",\n"+
             "    \"dialect\" : \"dialect/test3.json\",\n" +
             "    \"schema\" : \"schema/population_schema.json\",\n" +
             "    \"path\" : \"data/test3.csv\"\n" +

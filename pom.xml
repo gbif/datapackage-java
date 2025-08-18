@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.frictionlessdata</groupId>
     <artifactId>datapackage-java</artifactId>
-    <version>0.9.2.2-gbif-SNAPSHOT</version>
+    <version>0.9.7-gbif-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <issueManagement>
@@ -36,8 +36,8 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <maven.compiler.compiler>${java.version}</maven.compiler.compiler>
-        <tableschema-java-version>0.9.2.1-gbif</tableschema-java-version>
-        <junit.version>5.12.2</junit.version>
+        <tableschema-java-version>0.9.6-gbif-SNAPSHOT</tableschema-java-version>
+        <junit.version>5.13.2</junit.version>
         <slf4j-simple.version>2.0.17</slf4j-simple.version>
         <apache-commons-collections4.version>4.5.0</apache-commons-collections4.version>
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
@@ -51,9 +51,9 @@
         <maven-release-plugin.version>3.1.1</maven-release-plugin.version>
         <nexus-staging-maven-plugin.version>1.7.0</nexus-staging-maven-plugin.version>
         <coveralls-maven-plugin.version>4.3.0</coveralls-maven-plugin.version>
-        <dependency-check-maven.version>12.1.1</dependency-check-maven.version>
+        <dependency-check-maven.version>12.1.3</dependency-check-maven.version>
         <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
-        <spotbugs-maven-plugin.version>4.9.3.0</spotbugs-maven-plugin.version>
+        <spotbugs-maven-plugin.version>4.9.3.2</spotbugs-maven-plugin.version>
     </properties>
 
     <repositories>

@@ -2,6 +2,7 @@ package io.frictionlessdata.datapackage.resource;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.frictionlessdata.datapackage.Package;
 import io.frictionlessdata.datapackage.*;
@@ -20,6 +21,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
 import static io.frictionlessdata.datapackage.Profile.PROFILE_DATA_PACKAGE_DEFAULT;
 import static io.frictionlessdata.datapackage.Profile.PROFILE_DATA_RESOURCE_DEFAULT;
@@ -58,6 +60,23 @@ public class NonTabularResourceTest {
             "      \"name\" : \"John Doe\",\n" +
             "      \"age\" : 30\n" +
             "    }\n" +
+            "  } ]\n" +
+            "}";
+
+    private static final String REFERENCE3 = "{\n" +
+            "  \"name\" : \"employees\",\n" +
+            "  \"profile\" : \"data-package\",\n" +
+            "  \"resources\" : [ {\n" +
+            "    \"name\" : \"employee-data\",\n" +
+            "    \"profile\" : \"tabular-data-resource\",\n" +
+            "    \"schema\" : \"schema.json\",\n" +
+            "    \"path\" : \"data/employees.csv\"\n" +
+            "  }, {\n" +
+            "    \"name\" : \"non-tabular-resource\",\n" +
+            "    \"profile\" : \"data-resource\",\n" +
+            "    \"encoding\" : \"UTF-8\",\n" +
+            "    \"format\" : \"pdf\",\n" +
+            "    \"path\" : \"sample.pdf\"\n" +
             "  } ]\n" +
             "}";
 
@@ -160,6 +179,242 @@ public class NonTabularResourceTest {
 
     }
 
+    @Test
+    @DisplayName("Test adding a non-tabular file resource, and saving package")
+    public void testNonTabularResource3() throws Exception {
+        File tempDirPathData = Files.createTempDirectory("datapackage-").toFile();
+        String fName = "/fixtures/datapackages/employees/datapackage.json";
+        Path resourcePath = TestUtil.getResourcePath(fName);
+        io.frictionlessdata.datapackage.Package dp = new Package(resourcePath, true);
+        dp.setProfile(PROFILE_DATA_PACKAGE_DEFAULT);
+
+        byte[] referenceData = TestUtil.getResourceContent("/fixtures/files/sample.pdf");
+        String fileName = "sample.pdf";
+        File f = new File(tempDirPathData, fileName);
+        try (OutputStream os = Files.newOutputStream(f.toPath())) {
+            os.write(referenceData);
+        } catch (IOException e) {
+            throw new RuntimeException("Error writing DOE setup to file: " + e.getMessage(), e);
+        }
+        FilebasedResource testResource = new FilebasedResource("non-tabular-resource", List.of(new File(fileName)), tempDirPathData);
+        testResource.setProfile(Profile.PROFILE_DATA_RESOURCE_DEFAULT);
+        testResource.setSerializationFormat(null);
+        dp.addResource(testResource);
+
+        File tempDirPath = Files.createTempDirectory("datapackage-").toFile();
+        File outFile = new File (tempDirPath, "datapackage.json");
+        dp.write(outFile, false);
+
+        String content = String.join("\n", Files.readAllLines(outFile.toPath()));
+        Assertions.assertEquals(REFERENCE3.replaceAll("[\n\r]+", "\n"), content.replaceAll("[\n\r]+", "\n"));
+
+        Package round2Package = new Package(outFile.toPath(), true);
+        Assertions.assertEquals(2, round2Package.getResources().size());
+        Assertions.assertEquals("non-tabular-resource", round2Package.getResources().get(1).getName());
+        Assertions.assertEquals("data-resource", round2Package.getResources().get(1).getProfile());
+        Assertions.assertEquals("pdf", round2Package.getResources().get(1).getFormat());
+        Assertions.assertEquals(new String((byte[])referenceData), new String((byte[])round2Package.getResources().get(1).getRawData()));
+
+        // write the package out again
+        Path tempDirPathRound3 = Files.createTempDirectory("datapackage-");
+        File outFileRound3 = new File (tempDirPathRound3.toFile(), "datapackage.json");
+        round2Package.write(outFileRound3, false);
+
+        // read back the datapackage.json and compare to the expected output
+        String contentRound3 = String.join("\n", Files.readAllLines(outFileRound3.toPath()));
+        Assertions.assertEquals(REFERENCE3.replaceAll("[\n\r]+", "\n"), contentRound3.replaceAll("[\n\r]+", "\n"));
+
+        // read the package back in and check number of resourcces
+        Package round3Package = new Package(outFileRound3.toPath(), true);
+        Assertions.assertEquals(2, round3Package.getResources().size());
+
+        // compare the non-tabular resource with expected values
+        Resource<?> round3Resource = round3Package.getResource("non-tabular-resource");
+        Assertions.assertEquals("data-resource", round3Resource.getProfile());
+        Object rawData = round3Resource.getRawData();
+        Assertions.assertEquals(new String((byte[])referenceData), new String((byte[])rawData));
+
+    }
+
+
+    @Test
+    @DisplayName("Test creating ZIP-compressed datapackage with PDF as FilebasedResource")
+    public void testZipCompressedDatapackageWithPdfResource() throws Exception {
+        // Create temporary directories
+        Path tempDirPath = Files.createTempDirectory("datapackage-source-");
+        Path tempOutputPath = Files.createTempDirectory("datapackage-output-");
+
+        // Copy PDF to temporary directory
+        byte[] pdfContent = TestUtil.getResourceContent("/fixtures/files/sample.pdf");
+        File pdfFile = new File(tempDirPath.toFile(), "sample.pdf");
+        Files.write(pdfFile.toPath(), pdfContent);
+
+        // Create FilebasedResource directly for the PDF
+        FilebasedResource pdfResource = new FilebasedResource(
+                "pdf-document",
+                List.of(new File("sample.pdf")),
+                tempDirPath.toFile()
+        );
+
+        // Create a package with the resource
+        List<Resource> resources = new ArrayList<>();
+        resources.add(pdfResource);
+        io.frictionlessdata.datapackage.Package pkg = new io.frictionlessdata.datapackage.Package(resources);
+        pkg.setName("pdf-package");
+        pkg.setProfile(Profile.PROFILE_DATA_PACKAGE_DEFAULT);
+
+        // Set default resource profile and format
+        pdfResource.setProfile(Profile.PROFILE_DATA_RESOURCE_DEFAULT);
+        pdfResource.setFormat("pdf");
+        pdfResource.setTitle("Sample PDF Document");
+        pdfResource.setDescription("A test PDF file");
+        pdfResource.setMediaType("application/pdf");
+        pdfResource.setEncoding("UTF-8");
+
+        // Write as ZIP-compressed package
+        File zipFile = new File(tempOutputPath.toFile(), "datapackage.zip");
+        pkg.write(zipFile, true); // true for compression
+
+        // Verify ZIP file was created
+        Assertions.assertTrue(zipFile.exists());
+        Assertions.assertTrue(zipFile.length() > 0);
+
+        // Read the package back from ZIP
+        io.frictionlessdata.datapackage.Package readPackage = new io.frictionlessdata.datapackage.Package(zipFile.toPath(), true);
+
+        // Verify package properties
+        Assertions.assertEquals("pdf-package", readPackage.getName());
+        Assertions.assertEquals(1, readPackage.getResources().size());
+
+        // Verify PDF resource
+        Resource<?> readResource = readPackage.getResource("pdf-document");
+        Assertions.assertNotNull(readResource);
+        Assertions.assertEquals(Profile.PROFILE_DATA_RESOURCE_DEFAULT, readResource.getProfile());
+        Assertions.assertEquals("pdf", readResource.getFormat());
+        Assertions.assertEquals("Sample PDF Document", readResource.getTitle());
+        Assertions.assertEquals("application/pdf", readResource.getMediaType());
+    }
+
+    @Test
+    @DisplayName("Test creating uncompressed datapackage with PDF as FilebasedResource")
+    public void testUnCompressedDatapackageWithPdfResource() throws Exception {
+        // Create temporary directories
+        Path tempDirPath = Files.createTempDirectory("datapackage-source-");
+        Path tempOutputPath = Files.createTempDirectory("datapackage-output-");
+
+        // Copy PDF to temporary directory
+        byte[] pdfContent = TestUtil.getResourceContent("/fixtures/files/sample.pdf");
+        File pdfFile = new File(tempDirPath.toFile(), "sample.pdf");
+        Files.write(pdfFile.toPath(), pdfContent);
+
+        // Create FilebasedResource directly for the PDF
+        FilebasedResource pdfResource = new FilebasedResource(
+                "pdf-document",
+                List.of(new File("sample.pdf")),
+                tempDirPath.toFile()
+        );
+
+        // Create a package with the resource
+        List<Resource> resources = new ArrayList<>();
+        resources.add(pdfResource);
+        io.frictionlessdata.datapackage.Package pkg = new io.frictionlessdata.datapackage.Package(resources);
+        pkg.setName("pdf-package");
+        pkg.setProfile(Profile.PROFILE_DATA_PACKAGE_DEFAULT);
+
+        // Set default resource profile and format
+        pdfResource.setProfile(Profile.PROFILE_DATA_RESOURCE_DEFAULT);
+        pdfResource.setFormat("pdf");
+        pdfResource.setTitle("Sample PDF Document");
+        pdfResource.setDescription("A test PDF file");
+        pdfResource.setMediaType("application/pdf");
+        pdfResource.setEncoding("UTF-8");
+
+        // Write as ZIP-compressed package
+        File packageFile = new File(tempOutputPath.toFile(), "datapackage");
+        pkg.write(packageFile, false); // false for compression
+
+        Assertions.assertTrue(packageFile.exists());;
+
+        // Read the package back from ZIP
+        io.frictionlessdata.datapackage.Package readPackage = new io.frictionlessdata.datapackage.Package(packageFile.toPath(), true);
+
+        // Verify package properties
+        Assertions.assertEquals("pdf-package", readPackage.getName());
+        Assertions.assertEquals(1, readPackage.getResources().size());
+
+        // Verify PDF resource
+        Resource<?> readResource = readPackage.getResource("pdf-document");
+        Assertions.assertNotNull(readResource);
+        Assertions.assertEquals(Profile.PROFILE_DATA_RESOURCE_DEFAULT, readResource.getProfile());
+        Assertions.assertEquals("pdf", readResource.getFormat());
+        Assertions.assertEquals("Sample PDF Document", readResource.getTitle());
+        Assertions.assertEquals("application/pdf", readResource.getMediaType());
+    }
+
+    @Test
+    @DisplayName("Test creating ZIP-compressed datapackage with JSON ObjectNode as FilebasedResource")
+    public void testCreateAndReadZippedPackageWithJsonObject() throws Exception {
+        // Create temporary directories for source and output
+        Path tempDirPath = Files.createTempDirectory("datapackage-source-");
+        Path locPath = tempDirPath.resolve("data");
+        Files.createDirectories(locPath);
+        //Path tempOutputPath = Files.createTempDirectory("datapackage-output-");
+        Path tempOutputPath = tempDirPath;
+
+                // Create an ObjectNode and write it to a temporary file
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode jsonData = mapper.createObjectNode();
+        jsonData.put("key", "value");
+        jsonData.put("number", 123);
+        byte[] jsonBytes = mapper.writeValueAsBytes(jsonData);
+
+        File jsonFile = new File(locPath.toFile(), "data.json");
+        Files.write(jsonFile.toPath(), jsonBytes);
+
+        // Create a FilebasedResource for the JSON file
+        FilebasedResource jsonResource = new FilebasedResource(
+                "json-data",
+                List.of(new File("data/data.json")),
+                tempDirPath.toFile()
+        );
+
+        // Set resource properties
+        jsonResource.setProfile(Profile.PROFILE_DATA_RESOURCE_DEFAULT);
+        jsonResource.setFormat("json");
+        jsonResource.setMediaType("application/json");
+        jsonResource.setEncoding("UTF-8");
+
+        // Create a package with the resource
+        List<Resource> resources = new ArrayList<>();
+        resources.add(jsonResource);
+        Package pkg = new Package(resources);
+        pkg.setName("json-package");
+
+        // Write the package to a compressed ZIP file
+        File zipFile = new File(tempOutputPath.toFile(), "datapackage.zip");
+        pkg.write(zipFile, true);
+
+        // Verify the ZIP file was created
+        Assertions.assertTrue(zipFile.exists());
+        Assertions.assertTrue(zipFile.length() > 0);
+
+        // Read the package back from the ZIP file
+        Package readPackage = new Package(zipFile.toPath(), true);
+
+        // Verify package properties
+        Assertions.assertEquals("json-package", readPackage.getName());
+        Assertions.assertEquals(1, readPackage.getResources().size());
+
+        // Verify the JSON resource
+        Resource<?> readResource = readPackage.getResource("json-data");
+        Assertions.assertNotNull(readResource);
+        Assertions.assertEquals("application/json", readResource.getMediaType());
+
+        // Verify the content of the resource
+        byte[] readData = (byte[]) readResource.getRawData();
+        Assertions.assertArrayEquals(jsonBytes, readData);
+        Assertions.assertEquals("json", readResource.getFormat());
+    }
 
 
     /**

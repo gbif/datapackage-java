@@ -6,8 +6,6 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.frictionlessdata.datapackage.Dialect;
 import io.frictionlessdata.datapackage.JSONBase;
 import io.frictionlessdata.datapackage.Package;
@@ -34,12 +32,11 @@ import org.apache.commons.collections4.iterators.IteratorChain;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.Writer;
+import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -449,9 +446,33 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
     }
 
     public void validate(Package pkg)  {
-        if (null == tables)
-            return;
+
         try {
+            // Validate required fields
+            if (getName() == null || getName().trim().isEmpty()) {
+                throw new DataPackageValidationException("Resource must have a name");
+            }
+
+            // Validate name format (alphanumeric, dash, underscore only)
+            if (!getName().matches("^[a-zA-Z0-9_-]+$")) {
+                throw new DataPackageValidationException("Resource name must contain only alphanumeric characters, dashes, and underscores");
+            }
+
+            // Validate profile
+            String profile = getProfile();
+            if (profile != null && !isValidProfile(profile)) {
+                throw new DataPackageValidationException("Invalid resource profile: " + profile);
+            }
+
+            if (null != schema) {
+                try {
+                    schema.validate();
+                } catch (DataPackageValidationException e) {
+                    throw new DataPackageValidationException("Schema validation failed for resource " + getName() + ": " + e.getMessage(), e);
+                }
+            }
+            if (null == tables)
+                return;
             // will validate schema against data
             tables.forEach(Table::validate);
             checkRelations(pkg);
@@ -728,7 +749,7 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
 
     @Override
     public void setSerializationFormat(String format) {
-        if ((format.equals(TableDataSource.Format.FORMAT_JSON.getLabel()))
+        if ((null == format) || (format.equals(TableDataSource.Format.FORMAT_JSON.getLabel()))
             || format.equals(TableDataSource.Format.FORMAT_CSV.getLabel())) {
             this.serializationFormat = format;
         } else
@@ -751,7 +772,7 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
 
     public abstract Set<String> getDatafileNamesForWriting();
 
-    private List<Table> ensureDataLoaded () throws Exception {
+    List<Table> ensureDataLoaded () throws Exception {
         if (null == tables) {
             tables = readData();
         }
@@ -774,16 +795,19 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
     @Override
     public void writeData(Path outputDir) throws Exception {
         Dialect lDialect = (null != dialect) ? dialect : Dialect.DEFAULT;
-        List<Table> tables = getTables();
+        boolean isNonTabular = ((profile != null) && (profile.equals(Profile.PROFILE_DATA_RESOURCE_DEFAULT)));
+        isNonTabular = (isNonTabular | (null == serializationFormat));
+        List<Table> tables = isNonTabular ? null : getTables();
+
         Set<String> paths = getDatafileNamesForWriting();
 
         int cnt = 0;
         for (String fName : paths) {
             String fileName = fName+"."+getSerializationFormat();
-            Table t  = tables.get(cnt++);
             Path p;
+            FileSystem fileSystem = outputDir.getFileSystem();
             if (outputDir.toString().isEmpty()) {
-                p = outputDir.getFileSystem().getPath(fileName);
+                p = fileSystem.getPath(fileName);
             } else {
                 p = outputDir.resolve(fileName);
             }
@@ -792,8 +816,14 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
             }
             Files.deleteIfExists(p);
 
-            // if the serializationFormat is set, serialize the data to JSON/CSV file
-            if (null != serializationFormat) {
+
+            if (isNonTabular) {
+                byte [] data = (byte[])this.getRawData();
+                try (OutputStream out = Files.newOutputStream(p)) {
+                    out.write(data);
+                }
+            } else {
+                Table t  = tables.get(cnt++);
                 try (Writer wr = Files.newBufferedWriter(p, StandardCharsets.UTF_8)) {
                     if (serializationFormat.equals(TableDataSource.Format.FORMAT_CSV.getLabel())) {
                         t.writeCsv(wr, lDialect.toCsvFormat());
@@ -801,15 +831,18 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
                         wr.write(t.asJson());
                     }
                 }
-            } else {
-                // if serializationFormat is not set (probably non-tabular data), serialize the data to a binary file
-                byte [] data = (byte[])this.getRawData();
-                try (FileOutputStream fos = new FileOutputStream(p.toFile())){
-                     fos.write(data);
-                }
             }
         }
     }
+
+
+    private static boolean isValidProfile(String profile) {
+        return profile.equals(Profile.PROFILE_DATA_RESOURCE_DEFAULT) ||
+                profile.equals(Profile.PROFILE_TABULAR_DATA_RESOURCE) ||
+                profile.startsWith("http://") ||
+                profile.startsWith("https://");
+    }
+
 
     /**
      * Write the Table as CSV into a file inside `outputDir`.
