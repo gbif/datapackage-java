@@ -754,6 +754,10 @@ public class NonTabularResourceTest {
         }
 
         @Override
+        public void checkPrimaryKeys() throws Exception {
+        }
+
+        @Override
         public void validate(Package aPackage) {
         }
 
