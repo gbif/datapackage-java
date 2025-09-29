@@ -47,36 +47,34 @@ public class PackageForeignKey {
      */
     public void validate() throws Exception {
         Reference reference = fk.getReference();
-        // self-reference, this can be validated by the Tableschema {@link io.frictionlessdata.tableschema.fk.ForeignKey} class
-        if (reference.getResource().equals("")) {
-           for (Table table : resource.getTables()) {
-                fk.validate(table);
-            }
+        Resource<?> refResource;
+        if (reference.getResource().isEmpty()) { // self reference
+            refResource = resource;
         } else {
-            // validate the foreign key
-            Resource<?> refResource = datapackage.getResource(reference.getResource());
-            if (refResource == null) {
-                throw new ForeignKeyException("Reference resource not found: " + reference.getResource());
-            }
-            List<String> fieldNames = new ArrayList<>();
-            List<String> foreignFieldNames = new ArrayList<>();
-            List<String> lFields = fk.getFieldNames();
-            Schema foreignSchema = refResource.getSchema();
-            if (null == foreignSchema) {
-                foreignSchema = refResource.inferSchema();
-            }
-            for (int i = 0; i < lFields.size(); i++) {
-                fieldNames.add(lFields.get(i));
-                String foreignFieldName = reference.getFieldNames().get(i);
-                foreignFieldNames.add(foreignFieldName);
-                Field<?> foreignField = foreignSchema.getField(foreignFieldName);
-                if (null == foreignField) {
-                    throw new ForeignKeyException("Foreign key ["+fieldNames.get(i)+ "-> "
-                            +reference.getFieldNames().get(i)+"] violation : expected: "
-                            +reference.getFieldNames().get(i) + ", but not found");
-                }
-            }
+            refResource = datapackage.getResource(reference.getResource());
+        }
 
+        // validate the foreign key
+        if (refResource == null) {
+            throw new ForeignKeyException("Reference resource not found: " + reference.getResource());
+        }
+        List<String> fieldNames = new ArrayList<>();
+        List<String> foreignFieldNames = new ArrayList<>();
+        List<String> lFields = fk.getFieldNames();
+        Schema foreignSchema = refResource.getSchema();
+        if (null == foreignSchema) {
+            foreignSchema = refResource.inferSchema();
+        }
+        for (int i = 0; i < lFields.size(); i++) {
+            fieldNames.add(lFields.get(i));
+            String foreignFieldName = reference.getFieldNames().get(i);
+            foreignFieldNames.add(foreignFieldName);
+            Field<?> foreignField = foreignSchema.getField(foreignFieldName);
+            if (null == foreignField) {
+                throw new ForeignKeyException("Foreign key ["+fieldNames.get(i)+ "-> "
+                        +reference.getFieldNames().get(i)+"] violation : expected: "
+                        +reference.getFieldNames().get(i) + ", but not found");
+            }
         }
     }
 

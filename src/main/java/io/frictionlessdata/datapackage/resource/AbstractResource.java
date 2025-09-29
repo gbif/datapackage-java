@@ -403,7 +403,12 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
                 Map<PackageForeignKey, List<Object>> map = new HashMap<>();
                 for (PackageForeignKey fk : fks) {
                     String refResourceName = fk.getForeignKey().getReference().getResource();
-                    Resource refResource = pkg.getResource(refResourceName);
+                    Resource refResource;
+                    if (refResourceName.isEmpty()) {
+                        refResource = this;
+                    } else {
+                        refResource = pkg.getResource(refResourceName);
+                    }
                     List<Object> data = refResource.getData(true, false, true, false);
                     map.put(fk, data);
                 }

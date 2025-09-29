@@ -10,15 +10,22 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ForeignKeyTest {
 
     @Test
+    void testForeignKeysSelfReference() throws Exception {
+        Path resourcePath = TestUtil.getResourcePath("/fixtures/datapackages/foreign_keys_self_reference.json");
+        io.frictionlessdata.datapackage.Package pkg = new io.frictionlessdata.datapackage.Package(resourcePath, true);
+        Resource teams = pkg.getResource("events");
+        teams.checkRelations(pkg);
+    }
+
+    @Test
     @DisplayName("Test that foreign keys are validated correctly, good case")
-    void testForeignKeysGoodCase() throws Exception{
+    void testForeignKeysGoodCase() throws Exception {
         Path resourcePath = TestUtil.getResourcePath("/fixtures/datapackages/foreign_keys_valid.json");
         io.frictionlessdata.datapackage.Package pkg = new io.frictionlessdata.datapackage.Package(resourcePath, true);
         Resource teams = pkg.getResource("teams");
@@ -27,7 +34,7 @@ public class ForeignKeyTest {
 
     @Test
     @DisplayName("Test that foreign keys are validated correctly, bad case")
-    void testForeignKeysBadCase() throws Exception{
+    void testForeignKeysBadCase() throws Exception {
         Path resourcePath = TestUtil.getResourcePath("/fixtures/datapackages/foreign_keys_invalid.json");
         io.frictionlessdata.datapackage.Package pkg = new Package(resourcePath, true);
         Resource teams = pkg.getResource("teams");

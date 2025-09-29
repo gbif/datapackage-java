@@ -1,0 +1,67 @@
+{
+  "name": "foreign-keys",
+  "resources": [
+    {
+      "name": "events",
+      "data": [
+        ["id", "parentEventID", "name", "city"],
+        ["1", null, "main event 1", "London"],
+        ["2", "1", "secondary event 1/1", "London"],
+        ["3", "2", "secondary event 2/1", "London"],
+        ["4", null, "main event 2", "Madrid"],
+        ["5", null, "main event 3", "Munich"],
+        ["6", "5", "secondary event 3/1", "Munich"],
+        ["7", "5", "secondary event 3/2", "Munich"]
+      ],
+      "schema": {
+        "missingValues": [""],
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer"
+          },
+          {
+            "name": "parentEventID",
+            "type": "integer",
+            "constraints": {
+              "required": false
+            }
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "city",
+            "type": "string"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "fields": "parentEventID",
+            "reference": {
+              "resource": "",
+              "fields": "id"
+            }
+          },
+          {
+            "fields": "city",
+            "reference": {
+              "resource": "cities",
+              "fields": "name"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "cities",
+      "data": [
+        ["name", "country"],
+        ["London", "England"],
+        ["Madrid", "Spain"],
+        ["Munich", "Germany"]
+      ]
+    }
+  ]
+}
