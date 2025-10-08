@@ -376,6 +376,8 @@ public interface Resource<T> extends BaseInterface {
 
     void checkRelations(Package pkg) throws Exception;
 
+    Set<String> checkRelationsV2(Package pkg) throws Exception;
+
     void checkPrimaryKeys() throws Exception;
 
     /**

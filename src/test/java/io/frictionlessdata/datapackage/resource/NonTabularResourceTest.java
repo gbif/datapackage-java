@@ -17,11 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.ArrayList;
+import java.util.*;
 
 import static io.frictionlessdata.datapackage.Profile.PROFILE_DATA_PACKAGE_DEFAULT;
 import static io.frictionlessdata.datapackage.Profile.PROFILE_DATA_RESOURCE_DEFAULT;
@@ -751,6 +747,11 @@ public class NonTabularResourceTest {
 
         @Override
         public void checkRelations(Package aPackage) throws Exception {
+        }
+
+        @Override
+        public Set<String> checkRelationsV2(Package aPackage) throws Exception {
+            return new HashSet<>();
         }
 
         @Override

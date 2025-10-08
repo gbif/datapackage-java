@@ -29,6 +29,8 @@ import io.frictionlessdata.tableschema.util.TableSchemaUtil;
 import org.apache.commons.collections4.iterators.IteratorChain;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.mapdb.DB;
+import org.mapdb.DBMaker;
 
 import java.io.*;
 import java.net.URI;
@@ -451,6 +453,162 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
                 throw new DataPackageValidationException("Error reading data with relations: " + e.getMessage(), e);
             }
         }
+    }
+
+    @Override
+    public Set<String> checkRelationsV2(io.frictionlessdata.datapackage.Package pkg) {
+        Set<String> validationErrors = new HashSet<>();
+        if (null != schema) {
+            List<PackageForeignKey> fks = new ArrayList<>();
+            for (ForeignKey fk : schema.getForeignKeys()) {
+                String resourceName = fk.getReference().getResource();
+                Resource referencedResource;
+                if (null != resourceName) {
+                    if (resourceName.isEmpty()) {
+                        referencedResource = this;
+                    } else {
+                        referencedResource = pkg.getResource(resourceName);
+                    }
+
+                    boolean required = Optional.ofNullable(schema.getField(fk.getFields()))
+                            .map(Field::getConstraints)
+                            .map(c -> c.get(Field.CONSTRAINT_KEY_REQUIRED))
+                            .map(c -> (boolean) c)
+                            .orElse(true);
+
+                    // skip non-required field
+                    if (required && referencedResource == null) {
+                        validationErrors.add(String.format("Foreign key validation error: field [%s.%s] references resource [%s], which does not exist", name, fk.getFields(), resourceName));
+                    }
+                    try {
+                        PackageForeignKey pFK = new PackageForeignKey(fk, this, pkg);
+                        fks.add(pFK);
+                        pFK.validate(); // TODO: it is validated immediately? why more code afterwards?
+                    } catch (Exception e) {
+                        validationErrors.add("Foreign key validation error: " + e.getMessage());
+                    }
+                }
+            }
+
+            validationErrors.addAll(validateForeignKeyData(pkg, fks));
+        }
+
+        return validationErrors;
+    }
+
+    private Resource<?> resolveReferencedResource(io.frictionlessdata.datapackage.Package pkg, PackageForeignKey fk) {
+        String refResourceName = fk.getForeignKey().getReference().getResource();
+        Resource<?> refResource;
+        if (refResourceName.isEmpty()) {
+            refResource = this;
+        } else {
+            refResource = pkg.getResource(refResourceName);
+        }
+
+        if (refResource == null) {
+            System.out.println("Failed to resolve referenced resource: " + refResourceName);
+        }
+
+        return refResource;
+    }
+
+    /**
+     * Validates all foreign key constraints for this resource against other resources in the package.
+     * Designed for large datasets: iterates through data streams without loading full tables into memory.
+     *
+     * @param pkg The parent data package containing all related resources.
+     * @param fks List of foreign key definitions for this resource.
+     * @return A set of descriptive validation error messages.
+     */
+    private Set<String> validateForeignKeyData(Package pkg, List<PackageForeignKey> fks) {
+        Set<String> errors = new HashSet<>();
+
+        // Step 1: Build lookup sets for referenced tables
+        Map<PackageForeignKey, Set<Object>> fkValueSets = new HashMap<>();
+        Map<PackageForeignKey, DB> fkValueDbs = new HashMap<>();
+
+        for (PackageForeignKey fk : fks) {
+            Resource<?> refResource = resolveReferencedResource(pkg, fk);
+
+            // Create a temporary disk-backed set (auto-cleared on JVM exit)
+            DB db = DBMaker
+                    .tempFileDB()
+                    .fileMmapEnableIfSupported()
+                    .closeOnJvmShutdown()
+                    .make();
+
+            @SuppressWarnings("unchecked")
+            Set<Object> refValues = (Set<Object>) db
+                    .hashSet("refValues_" + fk.getForeignKey().getFields(), org.mapdb.Serializer.JAVA)
+                    .createOrOpen();
+
+            fkValueDbs.put(fk, db);
+
+            Iterator<Map<String, Object>> refIter;
+            try {
+                refIter = refResource.mappingIterator(false);
+                while (refIter.hasNext()) {
+                    Map<String, Object> refRow = refIter.next();
+                    for (String refField : fk.getForeignKey().getReference().getFieldNames()) {
+                        Object val = refRow.get(refField);
+                        if (val != null) {
+                            refValues.add(val);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(
+                        "Failed to read referenced resource '" + refResource.getName() + "': " + e.getMessage(), e);
+            }
+
+            fkValueSets.put(fk, refValues);
+        }
+
+        // Step 2: Validate current resource rows
+        Iterator<Map<String, Object>> rowIter = null;
+        try {
+            rowIter = this.mappingIterator(false);
+            long rowIndex = 0L;
+
+            while (rowIter.hasNext()) {
+                Map<String, Object> row = rowIter.next();
+                rowIndex++;
+
+                for (PackageForeignKey fk : fkValueSets.keySet()) {
+                    Set<Object> refValues = fkValueSets.get(fk);
+                    if (errors.size() >= 100) break;
+
+                    for (String fkField : fk.getForeignKey().getFieldNames()) {
+                        Object fkVal = row.get(fkField);
+                        if (fkVal == null) continue;
+
+                        if (errors.size() >= 100) break;
+
+                        if (!refValues.contains(fkVal)) {
+                            errors.add(String.format(
+                                    "Foreign key validation failed: field '%s' in table '%s' references resource '%s', but value '%s' was not found (row %d).",
+                                    fkField,
+                                    this.name,
+                                    fk.getForeignKey().getReference().getResource(),
+                                    fkVal,
+                                    rowIndex
+                            ));
+                        }
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error validating foreign keys for resource '" + this.name + "': " + e.getMessage(), e);
+        } finally {
+            if (rowIter instanceof Closeable) {
+                try { ((Closeable) rowIter).close(); } catch (IOException ignore) {}
+            }
+            // clean up MapDB instances
+            fkValueDbs.values().forEach(DB::close);
+        }
+
+        return errors;
     }
 
     @Override

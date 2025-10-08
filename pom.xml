@@ -41,6 +41,7 @@
         <slf4j-simple.version>2.0.17</slf4j-simple.version>
         <apache-commons-collections4.version>4.5.0</apache-commons-collections4.version>
         <externalsortinginjava.version>0.6.2</externalsortinginjava.version>
+        <mapdb.version>3.1.0</mapdb.version>
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <maven-dependency-plugin.version>3.8.1</maven-dependency-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
@@ -212,6 +213,13 @@
             <groupId>com.google.code.externalsortinginjava</groupId>
             <artifactId>externalsortinginjava</artifactId>
             <version>${externalsortinginjava.version}</version>
+        </dependency>
+
+        <!-- MapDB for foreign keys validation -->
+        <dependency>
+            <groupId>org.mapdb</groupId>
+            <artifactId>mapdb</artifactId>
+            <version>${mapdb.version}</version>
         </dependency>
 
         <!-- Unit Testing -->
