@@ -8,12 +8,41 @@ import io.frictionlessdata.tableschema.exception.ForeignKeyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ForeignKeyTest {
+
+    @ParameterizedTest(name = "Validate datapackage: {0}")
+    @MethodSource("datapackages")
+    void testInatDataset(String name, Path resourcePath) throws Exception {
+        io.frictionlessdata.datapackage.Package pkg = new io.frictionlessdata.datapackage.Package(resourcePath, true);
+        for (Resource<?> resource : pkg.getResources()) {
+            Set<String> validationErrors = resource.checkRelationsV2(pkg);
+
+            validationErrors.forEach(System.out::println);
+            assertEquals(0, validationErrors.size());
+        }
+    }
+
+    static Stream<Arguments> datapackages() {
+        Path baseDir = TestUtil.getResourcePath("/fixtures/datapackages/foreign-keys");
+
+        // 3M-records doesn't work
+        return Stream.of(
+                Arguments.of("datapackage", baseDir.resolve("datapackage/datapackage.json")),
+//                Arguments.of("datapackage-invalid", baseDir.resolve("datapackage-invalid/datapackage.json")),
+                Arguments.of("datapackage-with-empty-fields", baseDir.resolve("datapackage-with-empty-fields/datapackage.json"))
+        );
+    }
 
     @Test
     void testForeignKeysSelfReference() throws Exception {
