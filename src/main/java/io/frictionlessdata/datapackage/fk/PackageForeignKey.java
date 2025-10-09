@@ -11,6 +11,7 @@ import io.frictionlessdata.tableschema.schema.Schema;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * PackageForeignKey is a wrapper around the {@link io.frictionlessdata.tableschema.fk.ForeignKey} class to validate foreign keys
@@ -54,6 +55,19 @@ public class PackageForeignKey {
             refResource = datapackage.getResource(reference.getResource());
         }
 
+        Field<?> field = resource.getSchema().getField(fk.getFields());
+
+        Boolean required = Optional.ofNullable(field.getConstraints())
+                .map(c -> c.get(Field.CONSTRAINT_KEY_REQUIRED))
+                .filter(c -> c instanceof Boolean)
+                .map(c -> (Boolean) c)
+                .orElse(Boolean.TRUE);
+
+        // skip non-required foreign keys
+        if (Boolean.FALSE.equals(required)) {
+            return;
+        }
+
         // validate the foreign key
         if (refResource == null) {
             throw new ForeignKeyException("Reference resource not found: " + reference.getResource());
@@ -71,9 +85,9 @@ public class PackageForeignKey {
             foreignFieldNames.add(foreignFieldName);
             Field<?> foreignField = foreignSchema.getField(foreignFieldName);
             if (null == foreignField) {
-                throw new ForeignKeyException("Foreign key ["+fieldNames.get(i)+ "-> "
-                        +reference.getFieldNames().get(i)+"] violation : expected: "
-                        +reference.getFieldNames().get(i) + ", but not found");
+                throw new ForeignKeyException("Foreign key [" + fieldNames.get(i) + "-> "
+                        + reference.getFieldNames().get(i) + "] violation : expected: "
+                        + reference.getFieldNames().get(i) + ", but not found");
             }
         }
     }

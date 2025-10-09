@@ -483,7 +483,7 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
                     try {
                         PackageForeignKey pFK = new PackageForeignKey(fk, this, pkg);
                         fks.add(pFK);
-                        pFK.validate(); // TODO: it is validated immediately? why more code afterwards?
+                        pFK.validate();
                     } catch (Exception e) {
                         validationErrors.add("Foreign key validation error: " + e.getMessage());
                     }
@@ -503,10 +503,6 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
             refResource = this;
         } else {
             refResource = pkg.getResource(refResourceName);
-        }
-
-        if (refResource == null) {
-            System.out.println("Failed to resolve referenced resource: " + refResourceName);
         }
 
         return refResource;
@@ -546,19 +542,22 @@ public abstract class AbstractResource<T> extends JSONBase implements Resource<T
 
             Iterator<Map<String, Object>> refIter;
             try {
-                refIter = refResource.mappingIterator(false);
-                while (refIter.hasNext()) {
-                    Map<String, Object> refRow = refIter.next();
-                    for (String refField : fk.getForeignKey().getReference().getFieldNames()) {
-                        Object val = refRow.get(refField);
-                        if (val != null) {
-                            refValues.add(val);
+                if (refResource != null) {
+                    refIter = refResource.mappingIterator(false);
+
+                    while (refIter.hasNext()) {
+                        Map<String, Object> refRow = refIter.next();
+                        for (String refField : fk.getForeignKey().getReference().getFieldNames()) {
+                            Object val = refRow.get(refField);
+                            if (val != null) {
+                                refValues.add(val);
+                            }
                         }
                     }
                 }
             } catch (Exception e) {
                 throw new RuntimeException(
-                        "Failed to read referenced resource '" + refResource.getName() + "': " + e.getMessage(), e);
+                        "Failed to read referenced resource '" + fk.getForeignKey().getReference().getResource() + "': " + e.getMessage(), e);
             }
 
             fkValueSets.put(fk, refValues);
