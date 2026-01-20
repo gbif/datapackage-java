@@ -20,12 +20,12 @@
 
     <distributionManagement>
         <repository>
-            <id>gbif-release</id>
-            <url>https://repository.gbif.org/content/repositories/releases</url>
+            <id>gbif-thirdparty</id>
+            <url>https://repository.gbif.org/content/repositories/thirdparty</url>
         </repository>
         <snapshotRepository>
-            <id>gbif-snapshot</id>
-            <url>https://repository.gbif.org/content/repositories/snapshots</url>
+            <id>gbif-thirdparty-snapshot</id>
+            <url>https://repository.gbif.org/content/repositories/thirdparty-snapshots</url>
         </snapshotRepository>
     </distributionManagement>
 
